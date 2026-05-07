@@ -1,9 +1,12 @@
-name: Sync upstream
+﻿name: Sync upstream
 
 on:
   schedule:
     - cron: "0 3 * * *"
   workflow_dispatch:
+  push:
+    branches:
+      - main-custom
 
 permissions:
   contents: write
@@ -35,7 +38,7 @@ jobs:
       - name: Merge upstream into main-custom
         run: |
           git checkout main-custom
-          git merge --no-edit main-upstream
+          git merge --no-edit main-upstream || true
 
       - name: Push main-custom
         run: |
