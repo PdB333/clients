@@ -8,10 +8,10 @@ import { stringIsNotUndefinedNullAndEmpty } from "../../utils";
 import { AutotypeConfig } from "../models/autotype-config";
 import {
   AutotypeSequenceMode,
-  AUTOTYPE_SEQUENCE_MODES,
   DEFAULT_AUTOTYPE_SEQUENCE_MODE,
   isAutotypeSequenceMode,
 } from "../models/autotype-sequence-mode";
+import { getAutotypeSequenceTemplateFromMode } from "../models/autotype-sequence-template";
 import { AutotypeMatchError } from "../models/autotype-errors";
 import { AutotypeVaultData } from "../models/autotype-vault-data";
 import { AUTOTYPE_IPC_CHANNELS } from "../models/ipc-channels";
@@ -20,6 +20,9 @@ import { AutotypeKeyboardShortcut } from "../models/main-autotype-keyboard-short
 export class MainDesktopAutotypeService {
   private autotypeKeyboardShortcut: AutotypeKeyboardShortcut;
   private autotypeSequenceMode: AutotypeSequenceMode = DEFAULT_AUTOTYPE_SEQUENCE_MODE;
+  private autotypeSequenceTemplate: string = getAutotypeSequenceTemplateFromMode(
+    DEFAULT_AUTOTYPE_SEQUENCE_MODE,
+  );
 
   constructor(
     private logService: LogService,
@@ -54,6 +57,10 @@ export class MainDesktopAutotypeService {
         this.autotypeSequenceMode = DEFAULT_AUTOTYPE_SEQUENCE_MODE;
         this.logService.error("Configure autotype failed: the sequence mode is invalid.");
       }
+
+      this.autotypeSequenceTemplate =
+        config.sequenceTemplate?.trim() ||
+        getAutotypeSequenceTemplateFromMode(this.autotypeSequenceMode);
       this.setKeyboardShortcut(newKeyboardShortcut);
     });
 
@@ -146,7 +153,8 @@ export class MainDesktopAutotypeService {
   }
 
   private doAutotype(vaultData: AutotypeVaultData, keyboardShortcut: string[]) {
-    const inputPattern = this.getAutotypePattern(vaultData);
+    const sequenceTemplate = vaultData.sequenceTemplate || this.autotypeSequenceTemplate;
+    const inputPattern = this.getAutotypePattern(vaultData, sequenceTemplate);
     const inputArray = new Array<number>(inputPattern.length);
 
     for (let i = 0; i < inputPattern.length; i++) {
@@ -160,13 +168,56 @@ export class MainDesktopAutotypeService {
     }
   }
 
-  private getAutotypePattern(vaultData: AutotypeVaultData): string {
-    const tabPattern = `${vaultData.username}\t${vaultData.password}`;
+  private getAutotypePattern(vaultData: AutotypeVaultData, sequenceTemplate: string): string {
+    const tokenPattern = /\{([^{}]+)\}/g;
+    return sequenceTemplate.replace(tokenPattern, (_match, rawToken) =>
+      this.resolveToken(rawToken as string, vaultData),
+    );
+  }
 
-    if (this.autotypeSequenceMode === AUTOTYPE_SEQUENCE_MODES.USER_TAB_PASS_ENTER) {
-      return `${tabPattern}\n`;
+  private resolveToken(rawToken: string, vaultData: AutotypeVaultData): string {
+    const token = rawToken.trim();
+    const upperToken = token.toUpperCase();
+
+    if (upperToken.startsWith("S:")) {
+      const fieldName = token.substring(2).trim().toLowerCase();
+      return vaultData.customFields?.[fieldName] ?? "";
     }
 
-    return tabPattern;
+    const tokenHandlers: Record<string, () => string> = {
+      USERNAME: () => vaultData.username,
+      PASSWORD: () => vaultData.password,
+      TITLE: () => vaultData.title ?? "",
+      URL: () => vaultData.url ?? "",
+      NOTES: () => vaultData.notes ?? "",
+      TAB: () => "\t",
+      ENTER: () => "\r",
+      SPACE: () => " ",
+      BACKSPACE: () => "\b",
+      LEFTBRACE: () => "{",
+      RIGHTBRACE: () => "}",
+    };
+
+    const tokenHandler = tokenHandlers[upperToken];
+    if (tokenHandler != null) {
+      return tokenHandler();
+    }
+
+    const repeatMatch = upperToken.match(/^([A-Z_]+)\s+(\d+)$/);
+    if (repeatMatch != null) {
+      const repeatedToken = repeatMatch[1];
+      const repeatCount = Number.parseInt(repeatMatch[2], 10);
+      if (repeatCount > 0 && repeatCount <= 1000) {
+        const repeatedValue = this.resolveToken(repeatedToken, vaultData);
+        return repeatedValue.repeat(repeatCount);
+      }
+    }
+
+    if (upperToken.startsWith("DELAY")) {
+      // Delay actions are intentionally ignored here; current native API only accepts a static input buffer.
+      return "";
+    }
+
+    return `{${token}}`;
   }
 }

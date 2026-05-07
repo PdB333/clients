@@ -131,4 +131,71 @@
   </bit-card>
 </section>
 
+<section [formGroup]="loginDetailsForm" class="tw-mb-5 bit-compact:tw-mb-4">
+  <bit-section-header>
+    <h2 bitTypography="h6">
+      {{ "autotypeSettings" | i18n }}
+    </h2>
+  </bit-section-header>
+
+  <bit-card>
+    <bit-form-control>
+      <input bitCheckbox formControlName="autotypeEnabled" type="checkbox" />
+      <bit-label>{{ "autotypeEnableForEntry" | i18n }}</bit-label>
+    </bit-form-control>
+
+    <ng-container *ngIf="loginDetailsForm.controls.autotypeEnabled.value">
+      <bit-form-control>
+        <input bitCheckbox formControlName="autotypeUseCustomDefaultSequence" type="checkbox" />
+        <bit-label>{{ "autotypeUseCustomDefaultSequence" | i18n }}</bit-label>
+      </bit-form-control>
+
+      <bit-form-field *ngIf="loginDetailsForm.controls.autotypeUseCustomDefaultSequence.value">
+        <bit-label>{{ "autotypeDefaultSequence" | i18n }}</bit-label>
+        <input bitInput formControlName="autotypeDefaultSequence" class="tw-font-mono" />
+      </bit-form-field>
+
+      <div formArrayName="autotypeAssociations" class="tw-flex tw-flex-col tw-gap-3 tw-mt-2">
+        <div
+          *ngFor="let association of autotypeAssociations.controls; let i = index"
+          [formGroupName]="i"
+          class="tw-rounded tw-border tw-border-secondary-300 tw-p-3"
+        >
+          <bit-form-field>
+            <bit-label>{{ "autotypeWindowTitleMatcher" | i18n }}</bit-label>
+            <input
+              bitInput
+              formControlName="windowMatcher"
+              [attr.list]="'autotype-window-title-options'"
+              [placeholder]="'autotypeWindowTitleMatcherPlaceholder' | i18n"
+            />
+          </bit-form-field>
+          <bit-form-field disableMargin>
+            <bit-label>{{ "autotypeSpecificSequence" | i18n }}</bit-label>
+            <input bitInput formControlName="sequenceTemplate" class="tw-font-mono" />
+          </bit-form-field>
+          <button
+            type="button"
+            bitLink
+            linkType="danger"
+            class="tw-mt-2"
+            (click)="removeAutotypeAssociation(i)"
+          >
+            {{ "remove" | i18n }}
+          </button>
+        </div>
+      </div>
+
+      <datalist id="autotype-window-title-options">
+        <option *ngFor="let suggestion of windowTitleSuggestions" [value]="suggestion"></option>
+      </datalist>
+
+      <button type="button" bitLink linkType="primary" (click)="addAutotypeAssociation()">
+        <i class="bwi bwi-plus tw-font-medium" aria-hidden="true"></i>
+        {{ "autotypeAddWindowAssociation" | i18n }}
+      </button>
+    </ng-container>
+  </bit-card>
+</section>
+
 <vault-autofill-options></vault-autofill-options>

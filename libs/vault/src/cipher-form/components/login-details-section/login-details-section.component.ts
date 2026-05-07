@@ -3,13 +3,15 @@
 import { DatePipe, NgIf } from "@angular/common";
 import { Component, DestroyRef, inject, OnInit, Optional } from "@angular/core";
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
-import { FormBuilder, ReactiveFormsModule } from "@angular/forms";
+import { FormArray, FormBuilder, ReactiveFormsModule } from "@angular/forms";
 import { map } from "rxjs";
 
 import { JslibModule } from "@bitwarden/angular/jslib.module";
 import { AuditService } from "@bitwarden/common/abstractions/audit.service";
 import { EventCollectionService, EventType } from "@bitwarden/common/dirt/event-logs";
 import { I18nService } from "@bitwarden/common/platform/abstractions/i18n.service";
+import { FieldType } from "@bitwarden/common/vault/enums";
+import { FieldView } from "@bitwarden/common/vault/models/view/field.view";
 import { Fido2CredentialView } from "@bitwarden/common/vault/models/view/fido2-credential.view";
 import { LoginView } from "@bitwarden/common/vault/models/view/login.view";
 import {
@@ -25,9 +27,27 @@ import {
 } from "@bitwarden/components";
 
 import { CipherFormGenerationService } from "../../abstractions/cipher-form-generation.service";
+import { AutotypeWindowSuggestionsService } from "../../abstractions/autotype-window-suggestions.service";
 import { TotpCaptureService } from "../../abstractions/totp-capture.service";
 import { CipherFormContainer } from "../../cipher-form-container";
 import { AutofillOptionsComponent } from "../autofill-options/autofill-options.component";
+
+const AUTOTYPE_ENABLED_FIELD = "autotype:enabled";
+const AUTOTYPE_SEQUENCE_FIELD = "autotype:sequence";
+const AUTOTYPE_SEQUENCE_WINDOW_PREFIX = "autotype:sequence:window:";
+const DEFAULT_AUTOTYPE_SEQUENCE = "{USERNAME}{TAB}{PASSWORD}{ENTER}";
+
+type AutotypeAssociation = {
+  windowMatcher: string;
+  sequenceTemplate: string;
+};
+
+type ParsedAutotypeConfig = {
+  enabled: boolean;
+  useCustomDefaultSequence: boolean;
+  defaultSequence: string;
+  associations: AutotypeAssociation[];
+};
 
 // FIXME(https://bitwarden.atlassian.net/browse/CL-764): Migrate to OnPush
 // eslint-disable-next-line @angular-eslint/prefer-on-push-component-change-detection
@@ -55,7 +75,17 @@ export class LoginDetailsSectionComponent implements OnInit {
     username: [""],
     password: [""],
     totp: [""],
+    autotypeEnabled: [true],
+    autotypeUseCustomDefaultSequence: [false],
+    autotypeDefaultSequence: [DEFAULT_AUTOTYPE_SEQUENCE],
+    autotypeAssociations: this.formBuilder.array([]),
   });
+
+  windowTitleSuggestions: string[] = [];
+
+  get autotypeAssociations(): FormArray {
+    return this.loginDetailsForm.controls.autotypeAssociations as FormArray;
+  }
 
   /**
    * Flag indicating whether a new password has been generated for the current form.
@@ -116,6 +146,7 @@ export class LoginDetailsSectionComponent implements OnInit {
     private auditService: AuditService,
     private toastService: ToastService,
     private eventCollectionService: EventCollectionService,
+    @Optional() private autotypeWindowSuggestionsService?: AutotypeWindowSuggestionsService,
     @Optional() private totpCaptureService?: TotpCaptureService,
   ) {
     this.cipherFormContainer.registerChildForm("loginDetails", this.loginDetailsForm);
@@ -134,6 +165,14 @@ export class LoginDetailsSectionComponent implements OnInit {
             totp: value.totp?.trim(),
           } as LoginView);
 
+          cipher.fields = this.applyAutotypeConfigToFields(
+            cipher.fields,
+            value.autotypeEnabled ?? true,
+            value.autotypeUseCustomDefaultSequence ?? false,
+            value.autotypeDefaultSequence ?? DEFAULT_AUTOTYPE_SEQUENCE,
+            value.autotypeAssociations ?? [],
+          );
+
           return cipher;
         });
       });
@@ -144,9 +183,12 @@ export class LoginDetailsSectionComponent implements OnInit {
 
     if (prefillCipher) {
       this.initFromExistingCipher(prefillCipher.login);
+      this.initAutotypeConfigFromFields(prefillCipher.fields);
     } else {
       this.initNewCipher();
     }
+
+    void this.loadWindowTitleSuggestions();
 
     if (this.cipherFormContainer.config.mode === "partial-edit") {
       this.loginDetailsForm.disable();
@@ -167,11 +209,14 @@ export class LoginDetailsSectionComponent implements OnInit {
   }
 
   private initFromExistingCipher(existingLogin: LoginView) {
-    this.loginDetailsForm.patchValue({
-      username: this.initialValues?.username ?? existingLogin.username,
-      password: this.initialValues?.password ?? existingLogin.password,
-      totp: existingLogin.totp,
-    });
+    this.loginDetailsForm.patchValue(
+      {
+        username: this.initialValues?.username ?? existingLogin.username,
+        password: this.initialValues?.password ?? existingLogin.password,
+        totp: existingLogin.totp,
+      },
+      { emitEvent: false },
+    );
 
     if (this.cipherFormContainer.config.mode != "clone") {
       this.existingFido2Credentials = existingLogin.fido2Credentials;
@@ -184,10 +229,165 @@ export class LoginDetailsSectionComponent implements OnInit {
   }
 
   private initNewCipher() {
-    this.loginDetailsForm.patchValue({
-      username: this.initialValues?.username || "",
-      password: this.initialValues?.password || "",
+    this.loginDetailsForm.patchValue(
+      {
+        username: this.initialValues?.username || "",
+        password: this.initialValues?.password || "",
+      },
+      { emitEvent: false },
+    );
+    this.loginDetailsForm.patchValue(
+      {
+        autotypeEnabled: true,
+        autotypeUseCustomDefaultSequence: false,
+        autotypeDefaultSequence: DEFAULT_AUTOTYPE_SEQUENCE,
+      },
+      { emitEvent: false },
+    );
+  }
+
+  addAutotypeAssociation = () => {
+    this.autotypeAssociations.push(this.createAutotypeAssociationGroup());
+  };
+
+  removeAutotypeAssociation = (index: number) => {
+    this.autotypeAssociations.removeAt(index);
+  };
+
+  private createAutotypeAssociationGroup(
+    association: AutotypeAssociation = { windowMatcher: "", sequenceTemplate: "" },
+  ) {
+    return this.formBuilder.group({
+      windowMatcher: [association.windowMatcher ?? ""],
+      sequenceTemplate: [association.sequenceTemplate ?? ""],
     });
+  }
+
+  private initAutotypeConfigFromFields(fields?: FieldView[] | null) {
+    const parsed = this.parseAutotypeConfig(fields);
+
+    this.autotypeAssociations.clear();
+    for (const association of parsed.associations) {
+      this.autotypeAssociations.push(this.createAutotypeAssociationGroup(association));
+    }
+
+    this.loginDetailsForm.patchValue(
+      {
+        autotypeEnabled: parsed.enabled,
+        autotypeUseCustomDefaultSequence: parsed.useCustomDefaultSequence,
+        autotypeDefaultSequence: parsed.defaultSequence,
+      },
+      { emitEvent: false },
+    );
+  }
+
+  private parseAutotypeConfig(fields?: FieldView[] | null): ParsedAutotypeConfig {
+    const parsed: ParsedAutotypeConfig = {
+      enabled: true,
+      useCustomDefaultSequence: false,
+      defaultSequence: DEFAULT_AUTOTYPE_SEQUENCE,
+      associations: [],
+    };
+
+    for (const field of fields ?? []) {
+      const name = field.name?.trim();
+      const value = field.value?.trim();
+      if (!name || !value) {
+        continue;
+      }
+
+      const lowerName = name.toLowerCase();
+      if (lowerName === AUTOTYPE_ENABLED_FIELD) {
+        parsed.enabled = value.toLowerCase() !== "false";
+        continue;
+      }
+
+      if (lowerName === AUTOTYPE_SEQUENCE_FIELD) {
+        parsed.useCustomDefaultSequence = true;
+        parsed.defaultSequence = value;
+        continue;
+      }
+
+      if (lowerName.startsWith(AUTOTYPE_SEQUENCE_WINDOW_PREFIX)) {
+        const matcher = name.substring(AUTOTYPE_SEQUENCE_WINDOW_PREFIX.length).trim();
+        if (matcher) {
+          parsed.associations.push({
+            windowMatcher: matcher,
+            sequenceTemplate: value,
+          });
+        }
+      }
+    }
+
+    return parsed;
+  }
+
+  private applyAutotypeConfigToFields(
+    existingFields: FieldView[] | null | undefined,
+    enabled: boolean,
+    useCustomDefaultSequence: boolean,
+    defaultSequence: string,
+    associations: AutotypeAssociation[],
+  ): FieldView[] {
+    const preservedFields = (existingFields ?? []).filter((field) => {
+      const name = field.name?.trim().toLowerCase();
+      if (!name) {
+        return true;
+      }
+      return !this.isAutotypeManagedField(name);
+    });
+
+    const managedFields: FieldView[] = [];
+    if (!enabled) {
+      managedFields.push(this.makeField(AUTOTYPE_ENABLED_FIELD, "false"));
+      return [...preservedFields, ...managedFields];
+    }
+
+    if (useCustomDefaultSequence && defaultSequence?.trim()) {
+      managedFields.push(this.makeField(AUTOTYPE_SEQUENCE_FIELD, defaultSequence.trim()));
+    }
+
+    for (const association of associations ?? []) {
+      const matcher = association?.windowMatcher?.trim();
+      const sequenceTemplate = association?.sequenceTemplate?.trim();
+      if (!matcher || !sequenceTemplate) {
+        continue;
+      }
+
+      managedFields.push(
+        this.makeField(`${AUTOTYPE_SEQUENCE_WINDOW_PREFIX}${matcher}`, sequenceTemplate),
+      );
+    }
+
+    return [...preservedFields, ...managedFields];
+  }
+
+  private isAutotypeManagedField(fieldNameLowercase: string): boolean {
+    return (
+      fieldNameLowercase === AUTOTYPE_ENABLED_FIELD ||
+      fieldNameLowercase === AUTOTYPE_SEQUENCE_FIELD ||
+      fieldNameLowercase.startsWith(AUTOTYPE_SEQUENCE_WINDOW_PREFIX)
+    );
+  }
+
+  private makeField(name: string, value: string): FieldView {
+    const field = new FieldView();
+    field.type = FieldType.Text;
+    field.name = name;
+    field.value = value;
+    return field;
+  }
+
+  private async loadWindowTitleSuggestions() {
+    if (!this.autotypeWindowSuggestionsService) {
+      return;
+    }
+
+    try {
+      this.windowTitleSuggestions = await this.autotypeWindowSuggestionsService.getWindowTitleSuggestions();
+    } catch {
+      this.windowTitleSuggestions = [];
+    }
   }
 
   /** Logs the givin event when in edit mode */

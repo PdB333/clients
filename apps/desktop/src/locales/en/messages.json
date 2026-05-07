@@ -4698,6 +4698,45 @@
   "autotypeCipherUnnamed": {
     "message": "Unnamed login"
   },
+  "autotypeAlwaysShowSelectionMenu": {
+    "message": "Always show Auto-Type selection menu"
+  },
+  "autotypeAlwaysShowSelectionMenuDesc": {
+    "message": "Show a mini selection dialog on shortcut press, even if only one match is found."
+  },
+  "autotypeTypeSequence": {
+    "message": "Type sequence"
+  },
+  "autotypeSettings": {
+    "message": "Auto-Type"
+  },
+  "autotypeEnableForEntry": {
+    "message": "Enable Auto-Type for this entry"
+  },
+  "autotypeUseCustomDefaultSequence": {
+    "message": "Use custom default sequence for this entry"
+  },
+  "autotypeDefaultSequence": {
+    "message": "Default Auto-Type sequence"
+  },
+  "autotypeWindowTitleMatcher": {
+    "message": "Window title"
+  },
+  "autotypeWindowTitleMatcherPlaceholder": {
+    "message": "* - Notepad"
+  },
+  "autotypeSpecificSequence": {
+    "message": "Specific sequence for this window"
+  },
+  "autotypeAddWindowAssociation": {
+    "message": "Add window association"
+  },
+  "filterOrSearch": {
+    "message": "Filter or search..."
+  },
+  "noItemsToList": {
+    "message": "No items to list."
+  },
   "archiveNoun": {
     "message": "Archive",
     "description": "Noun"

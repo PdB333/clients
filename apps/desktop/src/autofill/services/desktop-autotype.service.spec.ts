@@ -31,11 +31,15 @@ describe("DesktopAutotypeService", () => {
   let mockAutotypeEnabledState: any;
   let mockAutotypeKeyboardShortcutState: any;
   let mockAutotypeSequenceModeState: any;
+  let mockAutotypeAlwaysShowSelectionMenuState: any;
+  let mockAutotypeWindowTitleHistoryState: any;
 
   // BehaviorSubjects for reactive state
   let autotypeEnabledSubject: BehaviorSubject<boolean | null>;
   let autotypeKeyboardShortcutSubject: BehaviorSubject<string[]>;
   let autotypeSequenceModeSubject: BehaviorSubject<string>;
+  let autotypeAlwaysShowSelectionMenuSubject: BehaviorSubject<boolean | null>;
+  let autotypeWindowTitleHistorySubject: BehaviorSubject<string[] | null>;
   let activeAccountSubject: BehaviorSubject<any>;
   let activeAccountStatusSubject: BehaviorSubject<AuthenticationStatus>;
   let cipherViewsSubject: BehaviorSubject<any[]>;
@@ -45,6 +49,8 @@ describe("DesktopAutotypeService", () => {
     autotypeEnabledSubject = new BehaviorSubject<boolean | null>(null);
     autotypeKeyboardShortcutSubject = new BehaviorSubject<string[]>(["Control", "Shift", "B"]);
     autotypeSequenceModeSubject = new BehaviorSubject<string>(AUTOTYPE_SEQUENCE_MODES.USER_TAB_PASS);
+    autotypeAlwaysShowSelectionMenuSubject = new BehaviorSubject<boolean | null>(null);
+    autotypeWindowTitleHistorySubject = new BehaviorSubject<string[] | null>([]);
     activeAccountSubject = new BehaviorSubject<any>({ id: "user-123" });
     activeAccountStatusSubject = new BehaviorSubject<AuthenticationStatus>(
       AuthenticationStatus.Unlocked,
@@ -85,6 +91,24 @@ describe("DesktopAutotypeService", () => {
       }),
     };
 
+    mockAutotypeAlwaysShowSelectionMenuState = {
+      state$: autotypeAlwaysShowSelectionMenuSubject.asObservable(),
+      update: jest.fn().mockImplementation(async (configureState) => {
+        const newState = configureState(autotypeAlwaysShowSelectionMenuSubject.value, null);
+        autotypeAlwaysShowSelectionMenuSubject.next(newState);
+        return newState;
+      }),
+    };
+
+    mockAutotypeWindowTitleHistoryState = {
+      state$: autotypeWindowTitleHistorySubject.asObservable(),
+      update: jest.fn().mockImplementation(async (configureState) => {
+        const newState = configureState(autotypeWindowTitleHistorySubject.value, null);
+        autotypeWindowTitleHistorySubject.next(newState);
+        return newState;
+      }),
+    };
+
     // Mock GlobalStateProvider
     mockGlobalStateProvider = {
       get: jest.fn().mockImplementation((keyDef) => {
@@ -96,6 +120,12 @@ describe("DesktopAutotypeService", () => {
         }
         if (keyDef.key === "autotypeSequenceMode") {
           return mockAutotypeSequenceModeState;
+        }
+        if (keyDef.key === "autotypeAlwaysShowSelectionMenu") {
+          return mockAutotypeAlwaysShowSelectionMenuState;
+        }
+        if (keyDef.key === "autotypeWindowTitleHistory") {
+          return mockAutotypeWindowTitleHistoryState;
         }
       }),
     } as any;
@@ -247,10 +277,13 @@ describe("DesktopAutotypeService", () => {
       await listenerCallback("Notepad", completeCallback);
 
       expect(mockDialogService.open).toHaveBeenCalled();
-      expect(completeCallback).toHaveBeenCalledWith(null, {
-        username: "user2",
-        password: "pass2",
-      });
+      expect(completeCallback).toHaveBeenCalledWith(
+        null,
+        expect.objectContaining({
+          username: "user2",
+          password: "pass2",
+        }),
+      );
     });
 
     it("should return an error when multiple ciphers match and user cancels selection", async () => {
@@ -438,19 +471,80 @@ describe("DesktopAutotypeService", () => {
 describe("getAutotypeVaultData", () => {
   it("should return vault data when cipher has username and password", () => {
     const cipherView = new CipherView();
+    cipherView.name = "My Login";
+    cipherView.notes = "Notes";
+    cipherView.login.uris = [{ uri: "https://example.com" } as any];
     cipherView.login.username = "foo";
     cipherView.login.password = "bar";
 
-    const [error, vaultData] = getAutotypeVaultData(cipherView);
+    const [error, vaultData] = getAutotypeVaultData(
+      cipherView,
+      "Notepad",
+      "{USERNAME}{TAB}{PASSWORD}",
+    );
 
     expect(error).toBeNull();
     expect(vaultData?.username).toEqual("foo");
     expect(vaultData?.password).toEqual("bar");
+    expect(vaultData?.title).toEqual("My Login");
+    expect(vaultData?.url).toEqual("https://example.com");
+    expect(vaultData?.notes).toEqual("Notes");
+    expect(vaultData?.sequenceTemplate).toEqual("{USERNAME}{TAB}{PASSWORD}");
+  });
+
+  it("should select window-specific sequence from custom field association", () => {
+    const cipherView = new CipherView();
+    cipherView.login.username = "foo";
+    cipherView.login.password = "bar";
+    cipherView.fields = [
+      {
+        name: "autotype:sequence",
+        value: "{USERNAME}{TAB}{PASSWORD}{ENTER}",
+      } as any,
+      {
+        name: "autotype:sequence:window:notepad",
+        value: "{PASSWORD}{ENTER}",
+      } as any,
+    ];
+
+    const [error, vaultData] = getAutotypeVaultData(
+      cipherView,
+      "Notepad - Untitled",
+      "{USERNAME}{TAB}{PASSWORD}",
+    );
+
+    expect(error).toBeNull();
+    expect(vaultData?.sequenceTemplate).toEqual("{PASSWORD}{ENTER}");
+  });
+
+  it("should expose custom field values for {S:...} placeholders", () => {
+    const cipherView = new CipherView();
+    cipherView.login.username = "foo";
+    cipherView.login.password = "bar";
+    cipherView.fields = [
+      {
+        name: "Address",
+        value: "221B Baker Street",
+      } as any,
+    ];
+
+    const [error, vaultData] = getAutotypeVaultData(
+      cipherView,
+      "Notepad",
+      "{USERNAME}{TAB}{PASSWORD}",
+    );
+
+    expect(error).toBeNull();
+    expect(vaultData?.customFields?.address).toEqual("221B Baker Street");
   });
 
   it("should return error when firstCipher is undefined", () => {
     const cipherView = undefined;
-    const [error, vaultData] = getAutotypeVaultData(cipherView);
+    const [error, vaultData] = getAutotypeVaultData(
+      cipherView,
+      "Notepad",
+      "{USERNAME}{TAB}{PASSWORD}",
+    );
 
     expect(vaultData).toBeNull();
     expect(error).toBeDefined();
@@ -462,7 +556,11 @@ describe("getAutotypeVaultData", () => {
     cipherView.login.username = undefined;
     cipherView.login.password = "bar";
 
-    const [error, vaultData] = getAutotypeVaultData(cipherView);
+    const [error, vaultData] = getAutotypeVaultData(
+      cipherView,
+      "Notepad",
+      "{USERNAME}{TAB}{PASSWORD}",
+    );
 
     expect(vaultData).toBeNull();
     expect(error).toBeDefined();
@@ -474,7 +572,11 @@ describe("getAutotypeVaultData", () => {
     cipherView.login.username = "foo";
     cipherView.login.password = undefined;
 
-    const [error, vaultData] = getAutotypeVaultData(cipherView);
+    const [error, vaultData] = getAutotypeVaultData(
+      cipherView,
+      "Notepad",
+      "{USERNAME}{TAB}{PASSWORD}",
+    );
 
     expect(vaultData).toBeNull();
     expect(error).toBeDefined();

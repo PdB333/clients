@@ -2,19 +2,56 @@
   <span bitDialogTitle>{{ "autotypeSelectCipherTitle" | i18n }}</span>
   <div bitDialogContent>
     <p>{{ "autotypeSelectCipherDesc" | i18n }}</p>
-    <div class="tw-flex tw-flex-col tw-gap-2">
-      <button
-        type="button"
-        bitButton
-        buttonType="secondary"
-        *ngFor="let option of data.options"
-        (click)="select(option.index)"
-      >
-        {{ getOptionLabel(option) }}
-      </button>
+    <div class="tw-mb-3">
+      <small class="help-block">{{ data.windowTitle }}</small>
+    </div>
+    <bit-form-field>
+      <bit-label>{{ "search" | i18n }}</bit-label>
+      <input
+        bitInput
+        [(ngModel)]="query"
+        (ngModelChange)="onQueryChanged()"
+        (keydown)="handleKeydown($event)"
+        [placeholder]="'filterOrSearch' | i18n"
+      />
+    </bit-form-field>
+    <div class="tw-max-h-80 tw-overflow-y-auto tw-rounded tw-border tw-border-secondary-300">
+      <table class="tw-w-full tw-text-sm">
+        <thead class="tw-bg-secondary-100">
+          <tr>
+            <th class="tw-px-3 tw-py-2 tw-text-left">{{ "title" | i18n }}</th>
+            <th class="tw-px-3 tw-py-2 tw-text-left">{{ "username" | i18n }}</th>
+            <th class="tw-px-3 tw-py-2 tw-text-left">{{ "autotypeSequenceMode" | i18n }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            *ngFor="let option of filteredOptions; let i = index"
+            [class.tw-bg-primary-100]="isSelected(option)"
+            class="tw-cursor-pointer hover:tw-bg-secondary-100"
+            (click)="selectedIndex = i"
+            (dblclick)="select(option.index)"
+          >
+            <td class="tw-px-3 tw-py-2">{{ getOptionLabel(option) }}</td>
+            <td class="tw-px-3 tw-py-2">{{ option.username }}</td>
+            <td class="tw-px-3 tw-py-2">
+              <div class="tw-font-mono">{{ option.sequenceTemplate }}</div>
+              <small class="tw-text-muted">{{ option.sequenceSource }}</small>
+            </td>
+          </tr>
+          <tr *ngIf="filteredOptions.length === 0">
+            <td colspan="3" class="tw-px-3 tw-py-2 tw-text-muted">
+              {{ "noItemsToList" | i18n }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
   <ng-container bitDialogFooter>
+    <button type="button" bitButton buttonType="primary" (click)="submitSelected()">
+      {{ "autotypeTypeSequence" | i18n }}
+    </button>
     <button type="button" bitButton buttonType="secondary" (click)="cancel()">
       {{ "cancel" | i18n }}
     </button>

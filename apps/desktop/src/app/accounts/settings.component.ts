@@ -162,6 +162,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       disabled: true,
     }),
     autotypeShortcut: [null as string | null],
+    autotypeAlwaysShowSelectionMenu: false,
     autotypeSequenceMode: [AUTOTYPE_SEQUENCE_MODES.USER_TAB_PASS as AutotypeSequenceMode],
     theme: [null as Theme | null],
     locale: [null as string | null],
@@ -331,6 +332,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
       enableAutotype: await firstValueFrom(this.desktopAutotypeService.autotypeEnabledUserSetting$),
       autotypeShortcut: this.getFormattedAutotypeShortcutText(
         (await firstValueFrom(this.desktopAutotypeService.autotypeKeyboardShortcut$)) ?? [],
+      ),
+      autotypeAlwaysShowSelectionMenu: await firstValueFrom(
+        this.desktopAutotypeService.autotypeAlwaysShowSelectionMenu$,
       ),
       autotypeSequenceMode: await firstValueFrom(this.desktopAutotypeService.autotypeSequenceMode$),
       theme: await firstValueFrom(this.themeStateService.selectedTheme$),
@@ -800,6 +804,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
   async saveAutotypeSequenceMode() {
     await this.desktopAutotypeService.setAutotypeSequenceModeState(
       this.form.value.autotypeSequenceMode,
+    );
+  }
+
+  async saveAutotypeAlwaysShowSelectionMenu() {
+    await this.desktopAutotypeService.setAutotypeAlwaysShowSelectionMenuState(
+      this.form.value.autotypeAlwaysShowSelectionMenu,
     );
   }
 
