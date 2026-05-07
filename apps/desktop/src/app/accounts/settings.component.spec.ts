@@ -11,11 +11,9 @@ import { AccountService } from "@bitwarden/common/auth/abstractions/account.serv
 import { UserVerificationService } from "@bitwarden/common/auth/abstractions/user-verification/user-verification.service.abstraction";
 import { AutofillSettingsServiceAbstraction } from "@bitwarden/common/autofill/services/autofill-settings.service";
 import { DomainSettingsService } from "@bitwarden/common/autofill/services/domain-settings.service";
-import { BillingAccountProfileStateService } from "@bitwarden/common/billing/abstractions";
 import { DeviceType } from "@bitwarden/common/enums";
 import { PinServiceAbstraction } from "@bitwarden/common/key-management/pin/pin.service.abstraction";
 import { VaultTimeoutSettingsService } from "@bitwarden/common/key-management/vault-timeout";
-import { ConfigService } from "@bitwarden/common/platform/abstractions/config/config.service";
 import { I18nService } from "@bitwarden/common/platform/abstractions/i18n.service";
 import { LogService } from "@bitwarden/common/platform/abstractions/log.service";
 import { MessagingService } from "@bitwarden/common/platform/abstractions/messaging.service";
@@ -34,6 +32,7 @@ import { BiometricStateService, BiometricsStatus, KeyService } from "@bitwarden/
 import { SessionTimeoutSettingsComponent } from "@bitwarden/key-management-ui";
 
 import { SetPinComponent } from "../../auth/components/set-pin.component";
+import { AUTOTYPE_SEQUENCE_MODES } from "../../autofill/models/autotype-sequence-mode";
 import { SshAgentPromptType } from "../../autofill/models/ssh-agent-setting";
 import { DesktopAutofillSettingsService } from "../../autofill/services/desktop-autofill-settings.service";
 import { DesktopAutotypeService } from "../../autofill/services/desktop-autotype.service";
@@ -78,8 +77,6 @@ describe("SettingsComponent", () => {
   const keyService = mock<KeyService>();
   const dialogService = mock<DialogService>();
   const desktopAutotypeService = mock<DesktopAutotypeService>();
-  const billingAccountProfileStateService = mock<BillingAccountProfileStateService>();
-  const configService = mock<ConfigService>();
   const userVerificationService = mock<UserVerificationService>();
 
   const mockUserKey = new SymmetricCryptoKey(new Uint8Array(64));
@@ -113,7 +110,6 @@ describe("SettingsComponent", () => {
         },
         { provide: AccountService, useValue: accountService },
         { provide: BiometricStateService, useValue: biometricStateService },
-        { provide: ConfigService, useValue: configService },
         {
           provide: DesktopAutofillSettingsService,
           useValue: desktopAutofillSettingsService,
@@ -141,7 +137,6 @@ describe("SettingsComponent", () => {
         { provide: MessagingService, useValue: messagingService },
         { provide: ToastService, useValue: mock<ToastService>() },
         { provide: DesktopAutotypeService, useValue: desktopAutotypeService },
-        { provide: BillingAccountProfileStateService, useValue: billingAccountProfileStateService },
       ],
       schemas: [NO_ERRORS_SCHEMA],
     }).compileComponents();
@@ -190,8 +185,7 @@ describe("SettingsComponent", () => {
     policyService.policiesByType$.mockReturnValue(of([null]));
     desktopAutotypeService.autotypeEnabledUserSetting$ = of(false);
     desktopAutotypeService.autotypeKeyboardShortcut$ = of(["Control", "Alt", "B"]);
-    billingAccountProfileStateService.hasPremiumFromAnySource$.mockReturnValue(of(false));
-    configService.getFeatureFlag$.mockReturnValue(of(false));
+    desktopAutotypeService.autotypeSequenceMode$ = of(AUTOTYPE_SEQUENCE_MODES.USER_TAB_PASS);
   });
 
   afterEach(() => {

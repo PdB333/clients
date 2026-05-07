@@ -1,7 +1,6 @@
 import { forkJoin, map, Observable } from "rxjs";
 
 import { CipherView } from "@bitwarden/common/vault/models/view/cipher.view";
-import { CipherViewLikeUtils } from "@bitwarden/common/vault/utils/cipher-view-like-utils";
 import { LogService } from "@bitwarden/logging";
 
 import { getTrimmedCipherUris } from "../../../../reports/risk-insights/helpers";
@@ -35,7 +34,7 @@ export class DefaultReportGenerationService extends ReportGenerationService {
     super();
   }
 
-  generateReport$(
+  generateReport(
     ciphers: CipherView[],
     members: OrganizationUserView[],
     collectionAccess: CollectionAccessDetails[],
@@ -94,7 +93,7 @@ export class DefaultReportGenerationService extends ReportGenerationService {
 
     return forkJoin({
       healthMap: this.cipherHealthService.checkCipherHealth(ciphers),
-      mappingResult: this.memberCipherMappingService.mapCiphersToMembers$(
+      mappingResult: this.memberCipherMappingService.mapCiphersToMembers(
         ciphers,
         members,
         collectionAccess,
@@ -166,7 +165,7 @@ export class DefaultReportGenerationService extends ReportGenerationService {
       if (cipherGroup.length > 0) {
         const firstCipher = cipherGroup[0];
         report.iconCipherId = firstCipher.id;
-        report.iconUri = CipherViewLikeUtils.uri(firstCipher) ?? applicationName;
+        report.iconUri = firstCipher.login?.uris?.[0]?.uri ?? applicationName;
       }
 
       reports.push(report);

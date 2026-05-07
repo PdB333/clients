@@ -4,7 +4,6 @@ import {
   MAX_DEEP_QUERY_RECURSION_DEPTH,
 } from "@bitwarden/common/autofill/constants";
 
-import { stopwatch } from "../content/performance";
 import { nodeIsElement } from "../utils";
 
 import { DomQueryService as DomQueryServiceInterface } from "./abstractions/dom-query.service";
@@ -36,7 +35,6 @@ export class DomQueryService implements DomQueryServiceInterface {
   ]);
 
   constructor() {
-    this.getShadowRoot = stopwatch("getShadowRoot", this.getShadowRoot);
     void this.init();
   }
 

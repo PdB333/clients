@@ -7,7 +7,6 @@ import { RouterModule } from "@angular/router";
 import { BehaviorSubject, Observable, Subject, firstValueFrom, of } from "rxjs";
 import { concatMap, map, switchMap, takeUntil, timeout } from "rxjs/operators";
 
-import { PremiumBadgeComponent } from "@bitwarden/angular/billing/components/premium-badge";
 import { PolicyService } from "@bitwarden/common/admin-console/abstractions/policy/policy.service.abstraction";
 import { PolicyType } from "@bitwarden/common/admin-console/enums";
 import { getFirstPolicy } from "@bitwarden/common/admin-console/services/policy/default-policy.service";
@@ -17,12 +16,9 @@ import { getUserId } from "@bitwarden/common/auth/services/account.service";
 import { ClearClipboardDelay } from "@bitwarden/common/autofill/constants";
 import { AutofillSettingsServiceAbstraction } from "@bitwarden/common/autofill/services/autofill-settings.service";
 import { DomainSettingsService } from "@bitwarden/common/autofill/services/domain-settings.service";
-import { BillingAccountProfileStateService } from "@bitwarden/common/billing/abstractions";
 import { DeviceType } from "@bitwarden/common/enums";
-import { FeatureFlag } from "@bitwarden/common/enums/feature-flag.enum";
 import { PinServiceAbstraction } from "@bitwarden/common/key-management/pin/pin.service.abstraction";
 import { VaultTimeoutSettingsService } from "@bitwarden/common/key-management/vault-timeout";
-import { ConfigService } from "@bitwarden/common/platform/abstractions/config/config.service";
 import { I18nService } from "@bitwarden/common/platform/abstractions/i18n.service";
 import { LogService } from "@bitwarden/common/platform/abstractions/log.service";
 import { MessagingService } from "@bitwarden/common/platform/abstractions/messaging.service";
@@ -51,12 +47,15 @@ import { KeyService, BiometricStateService, BiometricsStatus } from "@bitwarden/
 import { SessionTimeoutSettingsComponent } from "@bitwarden/key-management-ui";
 import { I18nPipe } from "@bitwarden/ui-common";
 import { PermitCipherDetailsPopoverComponent } from "@bitwarden/vault";
-
-import { SetPinComponent } from "../../auth/components/set-pin.component";
 import { AutotypeShortcutComponent } from "../../autofill/components/autotype-shortcut.component";
+import {
+  AUTOTYPE_SEQUENCE_MODES,
+  AutotypeSequenceMode,
+} from "../../autofill/models/autotype-sequence-mode";
 import { SshAgentPromptType } from "../../autofill/models/ssh-agent-setting";
 import { DesktopAutofillSettingsService } from "../../autofill/services/desktop-autofill-settings.service";
 import { DesktopAutotypeService } from "../../autofill/services/desktop-autotype.service";
+import { SetPinComponent } from "../../auth/components/set-pin.component";
 import { DesktopBiometricsService } from "../../key-management/biometrics/desktop.biometrics.service";
 import { DesktopSettingsService } from "../../platform/services/desktop-settings.service";
 import { DesktopPremiumUpgradePromptService } from "../../services/desktop-premium-upgrade-prompt.service";
@@ -92,7 +91,6 @@ import { NativeMessagingManifestService } from "../services/native-messaging-man
     TypographyModule,
     SessionTimeoutSettingsComponent,
     PermitCipherDetailsPopoverComponent,
-    PremiumBadgeComponent,
   ],
 })
 export class SettingsComponent implements OnInit, OnDestroy {
@@ -101,6 +99,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
   themeOptions: any[];
   clearClipboardOptions: any[];
   sshAgentPromptBehaviorOptions: any[];
+  autotypeSequenceModeOptions: { name: string; value: AutotypeSequenceMode }[];
   supportsBiometric: boolean;
   private timerId: any;
   showAlwaysShowDock = false;
@@ -163,6 +162,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       disabled: true,
     }),
     autotypeShortcut: [null as string | null],
+    autotypeSequenceMode: [AUTOTYPE_SEQUENCE_MODES.USER_TAB_PASS as AutotypeSequenceMode],
     theme: [null as Theme | null],
     locale: [null as string | null],
   });
@@ -193,9 +193,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     private pinService: PinServiceAbstraction,
     private logService: LogService,
     private nativeMessagingManifestService: NativeMessagingManifestService,
-    private configService: ConfigService,
     private validationService: ValidationService,
-    private billingAccountProfileStateService: BillingAccountProfileStateService,
   ) {
     this.isMac = this.platformUtilsService.getDevice() === DeviceType.MacOsDesktop;
     this.isLinux = this.platformUtilsService.getDevice() === DeviceType.LinuxDesktop;
@@ -259,6 +257,17 @@ export class SettingsComponent implements OnInit, OnDestroy {
         value: SshAgentPromptType.RememberUntilLock,
       },
     ];
+
+    this.autotypeSequenceModeOptions = [
+      {
+        name: this.i18nService.t("autotypeSequenceUserTabPass"),
+        value: AUTOTYPE_SEQUENCE_MODES.USER_TAB_PASS,
+      },
+      {
+        name: this.i18nService.t("autotypeSequenceUserTabPassEnter"),
+        value: AUTOTYPE_SEQUENCE_MODES.USER_TAB_PASS_ENTER,
+      },
+    ];
   }
 
   async ngOnInit() {
@@ -266,14 +275,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
     // Autotype is for Windows initially
     const isWindows = this.platformUtilsService.getDevice() === DeviceType.WindowsDesktop;
-    if (isWindows) {
-      this.configService
-        .getFeatureFlag$(FeatureFlag.WindowsDesktopAutotype)
-        .pipe(takeUntil(this.destroy$))
-        .subscribe((enabled) => {
-          this.showEnableAutotype = enabled;
-        });
-    }
+    this.showEnableAutotype = isWindows;
 
     this.userHasMasterPassword = await this.userVerificationService.hasMasterPassword();
 
@@ -330,6 +332,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       autotypeShortcut: this.getFormattedAutotypeShortcutText(
         (await firstValueFrom(this.desktopAutotypeService.autotypeKeyboardShortcut$)) ?? [],
       ),
+      autotypeSequenceMode: await firstValueFrom(this.desktopAutotypeService.autotypeSequenceMode$),
       theme: await firstValueFrom(this.themeStateService.selectedTheme$),
       locale: await firstValueFrom(this.i18nService.userSetLocale$),
     };
@@ -344,14 +347,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this.showAlwaysShowDock = this.platformUtilsService.getDevice() === DeviceType.MacOsDesktop;
 
     if (isWindows) {
-      this.billingAccountProfileStateService
-        .hasPremiumFromAnySource$(activeAccount.id)
-        .pipe(takeUntil(this.destroy$))
-        .subscribe((hasPremium) => {
-          if (hasPremium) {
-            this.form.controls.enableAutotype.enable();
-          }
-        });
+      this.form.controls.enableAutotype.enable();
     }
 
     // Form events
@@ -799,6 +795,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this.getFormattedAutotypeShortcutText(newShortcutArray),
     );
     await this.desktopAutotypeService.setAutotypeKeyboardShortcutState(newShortcutArray);
+  }
+
+  async saveAutotypeSequenceMode() {
+    await this.desktopAutotypeService.setAutotypeSequenceModeState(
+      this.form.value.autotypeSequenceMode,
+    );
   }
 
   ngOnDestroy() {

@@ -29,12 +29,10 @@ describe("Performance instrumentation", () => {
   let markSpy: jest.SpyInstance;
   let measureSpy: jest.SpyInstance;
   let requestIdleCallbackSpy: jest.SpyInstance;
-  let warnSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     markSpy = jest.spyOn(performance, "mark").mockImplementation();
     measureSpy = jest.spyOn(performance, "measure").mockImplementation();
-    warnSpy = jest.spyOn(console, "warn").mockImplementation();
 
     // Execute idle callbacks synchronously by default
     requestIdleCallbackSpy = jest
@@ -58,15 +56,10 @@ describe("Performance instrumentation", () => {
       expect(perfModule.isInstrumentationEnabled()).toBe(false);
     });
 
-    it("enables instrumentation and creates a perf:enabled:autofill:bw mark", () => {
+    it("enables instrumentation and creates a perf:enabled mark", () => {
       perfModule.enableInstrumentation();
       expect(perfModule.isInstrumentationEnabled()).toBe(true);
-      expect(markSpy).toHaveBeenCalledWith("perf:enabled:autofill:bw");
-    });
-
-    it("warns that the profiler is enabled", () => {
-      perfModule.enableInstrumentation();
-      expect(warnSpy).toHaveBeenCalledWith("⏱️ Bitwarden autofill profiler enabled. ⏱️");
+      expect(markSpy).toHaveBeenCalledWith("perf:enabled");
     });
 
     it("remains enabled after being called multiple times", () => {
@@ -121,13 +114,9 @@ describe("Performance instrumentation", () => {
       const wrapped = perfModule.stopwatch("myFunc", fn);
       wrapped();
 
-      expect(markSpy).toHaveBeenCalledWith("myFunc:start:autofill:bw", { startTime: 100 });
-      expect(markSpy).toHaveBeenCalledWith("myFunc:end:autofill:bw", { startTime: 105 });
-      expect(measureSpy).toHaveBeenCalledWith(
-        "myFunc:autofill:bw",
-        "myFunc:start:autofill:bw",
-        "myFunc:end:autofill:bw",
-      );
+      expect(markSpy).toHaveBeenCalledWith("myFunc:start", { startTime: 100 });
+      expect(markSpy).toHaveBeenCalledWith("myFunc:end", { startTime: 105 });
+      expect(measureSpy).toHaveBeenCalledWith("myFunc", "myFunc:start", "myFunc:end");
     });
 
     it("does not record a timing entry when the wrapped function throws", () => {
@@ -146,8 +135,8 @@ describe("Performance instrumentation", () => {
       // The throw prevents recordEntry from being called — no marks or measures leak
       expect(measureSpy).not.toHaveBeenCalled();
       const markCalls = markSpy.mock.calls.map((c: unknown[]) => c[0]);
-      expect(markCalls).not.toContain("throws:start:autofill:bw");
-      expect(markCalls).not.toContain("throws:end:autofill:bw");
+      expect(markCalls).not.toContain("throws:start");
+      expect(markCalls).not.toContain("throws:end");
     });
 
     it("responds to enableInstrumentation called after wrapping", () => {
@@ -166,7 +155,7 @@ describe("Performance instrumentation", () => {
       wrapped();
 
       // Should now record
-      expect(markSpy).toHaveBeenCalledWith("late-enable:start:autofill:bw", { startTime: 0 });
+      expect(markSpy).toHaveBeenCalledWith("late-enable:start", { startTime: 0 });
     });
   });
 
@@ -194,13 +183,9 @@ describe("Performance instrumentation", () => {
       const result = perfModule.measure("block", () => 42);
 
       expect(result).toBe(42);
-      expect(markSpy).toHaveBeenCalledWith("block:start:autofill:bw", { startTime: 200 });
-      expect(markSpy).toHaveBeenCalledWith("block:end:autofill:bw", { startTime: 210 });
-      expect(measureSpy).toHaveBeenCalledWith(
-        "block:autofill:bw",
-        "block:start:autofill:bw",
-        "block:end:autofill:bw",
-      );
+      expect(markSpy).toHaveBeenCalledWith("block:start", { startTime: 200 });
+      expect(markSpy).toHaveBeenCalledWith("block:end", { startTime: 210 });
+      expect(measureSpy).toHaveBeenCalledWith("block", "block:start", "block:end");
     });
 
     it("does not record a timing entry when the function throws", () => {
@@ -218,8 +203,8 @@ describe("Performance instrumentation", () => {
       // The throw prevents recordEntry from being called — no marks or measures leak
       expect(measureSpy).not.toHaveBeenCalled();
       const markCalls = markSpy.mock.calls.map((c: unknown[]) => c[0]);
-      expect(markCalls).not.toContain("throws:start:autofill:bw");
-      expect(markCalls).not.toContain("throws:end:autofill:bw");
+      expect(markCalls).not.toContain("throws:start");
+      expect(markCalls).not.toContain("throws:end");
     });
   });
 
@@ -227,14 +212,14 @@ describe("Performance instrumentation", () => {
     it("creates a poison mark for the given name", () => {
       perfModule.poison("myFunc");
 
-      expect(markSpy).toHaveBeenCalledWith("myFunc:poison:autofill:bw");
+      expect(markSpy).toHaveBeenCalledWith("myFunc:poison");
     });
 
     it("works regardless of enabled state", () => {
       // Do not call enableInstrumentation — poison should work even when disabled
       perfModule.poison("myFunc");
 
-      expect(markSpy).toHaveBeenCalledWith("myFunc:poison:autofill:bw");
+      expect(markSpy).toHaveBeenCalledWith("myFunc:poison");
     });
   });
 
@@ -256,7 +241,7 @@ describe("Performance instrumentation", () => {
       wrapped();
       wrapped();
 
-      // 1 perf:enabled:autofill:bw mark + 3 entries × 2 marks each = 7
+      // 1 perf:enabled mark + 3 entries × 2 marks each = 7
       expect(markSpy).toHaveBeenCalledTimes(7);
       expect(measureSpy).toHaveBeenCalledTimes(3);
     });
@@ -364,7 +349,6 @@ describe("Performance instrumentation", () => {
       const setTimeoutSpy = jest.spyOn(globalThis, "setTimeout");
       jest.spyOn(performance, "mark").mockImplementation();
       jest.spyOn(performance, "measure").mockImplementation();
-      jest.spyOn(console, "warn").mockImplementation();
 
       let freshModule: typeof import("./performance");
       await jest.isolateModulesAsync(async () => {

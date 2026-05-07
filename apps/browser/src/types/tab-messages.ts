@@ -1,8 +1,7 @@
 export type TabMessage =
   | CopyTextTabMessage
   | ClearClipboardTabMessage
-  | GetClickedElementTabMessage
-  | CollectAutofillTriageTabMessage;
+  | GetClickedElementTabMessage;
 
 export type TabMessageBase<T extends string> = {
   command: T;
@@ -15,5 +14,3 @@ type CopyTextTabMessage = TabMessageBase<"copyText"> & {
 type ClearClipboardTabMessage = TabMessageBase<"clearClipboard">;
 
 type GetClickedElementTabMessage = TabMessageBase<"getClickedElement">;
-
-type CollectAutofillTriageTabMessage = TabMessageBase<"collectAutofillTriage">;

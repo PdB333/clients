@@ -6,6 +6,12 @@ import { LogService } from "@bitwarden/logging";
 import { WindowMain } from "../../main/window.main";
 import { stringIsNotUndefinedNullAndEmpty } from "../../utils";
 import { AutotypeConfig } from "../models/autotype-config";
+import {
+  AutotypeSequenceMode,
+  AUTOTYPE_SEQUENCE_MODES,
+  DEFAULT_AUTOTYPE_SEQUENCE_MODE,
+  isAutotypeSequenceMode,
+} from "../models/autotype-sequence-mode";
 import { AutotypeMatchError } from "../models/autotype-errors";
 import { AutotypeVaultData } from "../models/autotype-vault-data";
 import { AUTOTYPE_IPC_CHANNELS } from "../models/ipc-channels";
@@ -13,6 +19,7 @@ import { AutotypeKeyboardShortcut } from "../models/main-autotype-keyboard-short
 
 export class MainDesktopAutotypeService {
   private autotypeKeyboardShortcut: AutotypeKeyboardShortcut;
+  private autotypeSequenceMode: AutotypeSequenceMode = DEFAULT_AUTOTYPE_SEQUENCE_MODE;
 
   constructor(
     private logService: LogService,
@@ -41,6 +48,12 @@ export class MainDesktopAutotypeService {
         return;
       }
 
+      if (isAutotypeSequenceMode(config.sequenceMode)) {
+        this.autotypeSequenceMode = config.sequenceMode;
+      } else {
+        this.autotypeSequenceMode = DEFAULT_AUTOTYPE_SEQUENCE_MODE;
+        this.logService.error("Configure autotype failed: the sequence mode is invalid.");
+      }
       this.setKeyboardShortcut(newKeyboardShortcut);
     });
 
@@ -133,14 +146,27 @@ export class MainDesktopAutotypeService {
   }
 
   private doAutotype(vaultData: AutotypeVaultData, keyboardShortcut: string[]) {
-    const TAB = "\t";
-    const inputPattern = vaultData.username + TAB + vaultData.password;
+    const inputPattern = this.getAutotypePattern(vaultData);
     const inputArray = new Array<number>(inputPattern.length);
 
     for (let i = 0; i < inputPattern.length; i++) {
       inputArray[i] = inputPattern.charCodeAt(i);
     }
 
-    autotype.typeInput(inputArray, keyboardShortcut);
+    try {
+      autotype.typeInput(inputArray, keyboardShortcut);
+    } catch (error) {
+      this.logService.error("Failed to execute autotype.", error);
+    }
+  }
+
+  private getAutotypePattern(vaultData: AutotypeVaultData): string {
+    const tabPattern = `${vaultData.username}\t${vaultData.password}`;
+
+    if (this.autotypeSequenceMode === AUTOTYPE_SEQUENCE_MODES.USER_TAB_PASS_ENTER) {
+      return `${tabPattern}\n`;
+    }
+
+    return tabPattern;
   }
 }

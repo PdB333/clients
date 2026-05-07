@@ -1,6 +1,5 @@
 import { Injectable, OnDestroy } from "@angular/core";
 import {
-  combineLatest,
   concatMap,
   distinctUntilChanged,
   filter,
@@ -12,14 +11,12 @@ import {
   switchMap,
   takeUntil,
 } from "rxjs";
+import { DialogService } from "@bitwarden/components";
 
-import { Account, AccountService } from "@bitwarden/common/auth/abstractions/account.service";
+import { AccountService } from "@bitwarden/common/auth/abstractions/account.service";
 import { AuthService } from "@bitwarden/common/auth/abstractions/auth.service";
 import { AuthenticationStatus } from "@bitwarden/common/auth/enums/authentication-status";
-import { BillingAccountProfileStateService } from "@bitwarden/common/billing/abstractions";
 import { DeviceType } from "@bitwarden/common/enums";
-import { FeatureFlag } from "@bitwarden/common/enums/feature-flag.enum";
-import { ConfigService } from "@bitwarden/common/platform/abstractions/config/config.service";
 import { PlatformUtilsService } from "@bitwarden/common/platform/abstractions/platform-utils.service";
 import {
   GlobalStateProvider,
@@ -31,11 +28,15 @@ import { CipherView } from "@bitwarden/common/vault/models/view/cipher.view";
 import { LogService } from "@bitwarden/logging";
 import { UserId } from "@bitwarden/user-core";
 
+import { AutotypeCipherSelectionComponent } from "../components/autotype-cipher-selection.component";
 import { AutotypeConfig } from "../models/autotype-config";
+import {
+  AutotypeSequenceMode,
+  DEFAULT_AUTOTYPE_SEQUENCE_MODE,
+  isAutotypeSequenceMode,
+} from "../models/autotype-sequence-mode";
 import { AutotypeVaultData } from "../models/autotype-vault-data";
 import { DEFAULT_KEYBOARD_SHORTCUT } from "../models/main-autotype-keyboard-shortcut";
-
-import { DesktopAutotypeDefaultSettingPolicy } from "./desktop-autotype-policy.service";
 
 export const AUTOTYPE_ENABLED = new KeyDefinition<boolean | null>(
   AUTOTYPE_SETTINGS_DISK,
@@ -58,6 +59,12 @@ export const AUTOTYPE_KEYBOARD_SHORTCUT = new KeyDefinition<string[]>(
   { deserializer: (b) => b },
 );
 
+export const AUTOTYPE_SEQUENCE_MODE = new KeyDefinition<AutotypeSequenceMode>(
+  AUTOTYPE_SETTINGS_DISK,
+  "autotypeSequenceMode",
+  { deserializer: (b) => b },
+);
+
 @Injectable({
   providedIn: "root",
 })
@@ -66,14 +73,13 @@ export class DesktopAutotypeService implements OnDestroy {
   private readonly autotypeKeyboardShortcut = this.globalStateProvider.get(
     AUTOTYPE_KEYBOARD_SHORTCUT,
   );
-
-  // if the user's account is Premium
-  private readonly isPremiumAccount$: Observable<boolean>;
+  private readonly autotypeSequenceMode = this.globalStateProvider.get(AUTOTYPE_SEQUENCE_MODE);
 
   // The enabled/disabled state from the user settings menu
   autotypeEnabledUserSetting$: Observable<boolean> = of(false);
 
   autotypeKeyboardShortcut$: Observable<string[]> = of(DEFAULT_KEYBOARD_SHORTCUT);
+  autotypeSequenceMode$: Observable<AutotypeSequenceMode> = of(DEFAULT_AUTOTYPE_SEQUENCE_MODE);
 
   private destroy$ = new Subject<void>();
 
@@ -81,11 +87,9 @@ export class DesktopAutotypeService implements OnDestroy {
     private accountService: AccountService,
     private authService: AuthService,
     private cipherService: CipherService,
-    private configService: ConfigService,
     private globalStateProvider: GlobalStateProvider,
     private platformUtilsService: PlatformUtilsService,
-    private billingAccountProfileStateService: BillingAccountProfileStateService,
-    private desktopAutotypePolicy: DesktopAutotypeDefaultSettingPolicy,
+    private dialogService: DialogService,
     private logService: LogService,
   ) {
     this.autotypeEnabledUserSetting$ = this.autotypeEnabledState.state$.pipe(
@@ -94,17 +98,15 @@ export class DesktopAutotypeService implements OnDestroy {
       takeUntil(this.destroy$),
     );
 
-    this.isPremiumAccount$ = this.accountService.activeAccount$.pipe(
-      filter((account): account is Account => !!account),
-      switchMap((account) =>
-        this.billingAccountProfileStateService.hasPremiumFromAnySource$(account.id),
-      ),
-      distinctUntilChanged(), // Only emit when the boolean result changes
+    this.autotypeKeyboardShortcut$ = this.autotypeKeyboardShortcut.state$.pipe(
+      map((shortcut) => shortcut ?? DEFAULT_KEYBOARD_SHORTCUT),
       takeUntil(this.destroy$),
     );
 
-    this.autotypeKeyboardShortcut$ = this.autotypeKeyboardShortcut.state$.pipe(
-      map((shortcut) => shortcut ?? DEFAULT_KEYBOARD_SHORTCUT),
+    this.autotypeSequenceMode$ = this.autotypeSequenceMode.state$.pipe(
+      map((sequenceMode) =>
+        isAutotypeSequenceMode(sequenceMode) ? sequenceMode : DEFAULT_AUTOTYPE_SEQUENCE_MODE,
+      ),
       takeUntil(this.destroy$),
     );
   }
@@ -117,40 +119,21 @@ export class DesktopAutotypeService implements OnDestroy {
 
     ipc.autofill.listenAutotypeRequest(async (windowTitle, callback) => {
       const possibleCiphers = await this.matchCiphersToWindowTitle(windowTitle);
-      const firstCipher = possibleCiphers?.at(0);
-      const [error, vaultData] = getAutotypeVaultData(firstCipher);
+      const selectedCipher = await this.getSelectedCipher(possibleCiphers);
+      const [error, vaultData] = getAutotypeVaultData(selectedCipher);
       callback(error, vaultData);
     });
-
-    // If `autotypeDefaultPolicy` is `true` for a user's organization, and the
-    // user has never changed their local autotype setting (`autotypeEnabledState`),
-    // we set their local setting to `true` (once the local user setting is changed
-    // by this policy or the user themselves, the default policy should
-    // never change the user setting again).
-    combineLatest([
-      this.autotypeEnabledState.state$,
-      this.desktopAutotypePolicy.autotypeDefaultSetting$,
-    ])
-      .pipe(
-        concatMap(async ([autotypeEnabledState, autotypeDefaultPolicy]) => {
-          try {
-            if (autotypeDefaultPolicy === true && autotypeEnabledState === null) {
-              await this.setAutotypeEnabledState(true);
-            }
-          } catch {
-            this.logService.error("Failed to set Autotype enabled state.");
-          }
-        }),
-        takeUntil(this.destroy$),
-      )
-      .subscribe();
 
     // listen for changes in keyboard shortcut settings
     this.autotypeKeyboardShortcut$
       .pipe(
-        concatMap(async (keyboardShortcut) => {
+        switchMap((keyboardShortcut) =>
+          this.autotypeSequenceMode$.pipe(map((sequenceMode) => ({ keyboardShortcut, sequenceMode }))),
+        ),
+        concatMap(async ({ keyboardShortcut, sequenceMode }) => {
           const config: AutotypeConfig = {
             keyboardShortcut,
+            sequenceMode,
           };
           ipc.autofill.configureAutotype(config);
         }),
@@ -170,22 +153,11 @@ export class DesktopAutotypeService implements OnDestroy {
 
   // Returns an observable that represents whether autotype is enabled for the current user.
   private get autotypeFeatureEnabled$(): Observable<boolean> {
-    return combineLatest([
-      // if the user has enabled the setting
-      this.autotypeEnabledUserSetting$,
-      // if the feature flag is set
-      this.configService.getFeatureFlag$(FeatureFlag.WindowsDesktopAutotype),
-      // if there is an active account with an unlocked vault
-      this.authService.activeAccountStatus$,
-      // if the active user's account is Premium
-      this.isPremiumAccount$,
-    ]).pipe(
-      map(
-        ([settingsEnabled, ffEnabled, authStatus, isPremiumAcct]) =>
-          settingsEnabled &&
-          ffEnabled &&
-          authStatus === AuthenticationStatus.Unlocked &&
-          isPremiumAcct,
+    return this.autotypeEnabledUserSetting$.pipe(
+      switchMap((settingsEnabled) =>
+        this.authService.activeAccountStatus$.pipe(
+          map((authStatus) => settingsEnabled && authStatus === AuthenticationStatus.Unlocked),
+        ),
       ),
       distinctUntilChanged(), // Only emit when the boolean result changes
       takeUntil(this.destroy$),
@@ -200,6 +172,15 @@ export class DesktopAutotypeService implements OnDestroy {
 
   async setAutotypeKeyboardShortcutState(keyboardShortcut: string[]): Promise<void> {
     await this.autotypeKeyboardShortcut.update(() => keyboardShortcut);
+  }
+
+  async setAutotypeSequenceModeState(sequenceMode: AutotypeSequenceMode): Promise<void> {
+    if (!isAutotypeSequenceMode(sequenceMode)) {
+      this.logService.error("Autotype sequence mode is invalid.");
+      return;
+    }
+
+    await this.autotypeSequenceMode.update(() => sequenceMode);
   }
 
   async matchCiphersToWindowTitle(windowTitle: string): Promise<CipherView[]> {
@@ -232,6 +213,31 @@ export class DesktopAutotypeService implements OnDestroy {
     });
 
     return possibleCiphers;
+  }
+
+  private async getSelectedCipher(possibleCiphers: CipherView[]): Promise<CipherView | undefined> {
+    if (possibleCiphers.length === 0) {
+      return undefined;
+    }
+
+    if (possibleCiphers.length === 1) {
+      return possibleCiphers[0];
+    }
+
+    const options = possibleCiphers.map((cipher, index) => ({
+      index,
+      name: cipher.name ?? "",
+      username: cipher.login?.username ?? "",
+    }));
+
+    const dialogRef = AutotypeCipherSelectionComponent.open(this.dialogService, { options });
+    const selectedIndex = await firstValueFrom(dialogRef.closed);
+
+    if (selectedIndex == null) {
+      return undefined;
+    }
+
+    return possibleCiphers[selectedIndex];
   }
 
   ngOnDestroy() {

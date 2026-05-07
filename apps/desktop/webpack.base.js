@@ -47,6 +47,7 @@ const DEFAULT_PARAMS = {
 module.exports.buildConfig = function buildConfig(params) {
   params = { ...DEFAULT_PARAMS, ...params };
   const { NODE_ENV, ENV } = module.exports.getEnv();
+  const lowMemoryBuild = process.env.LOW_MEMORY_BUILD === "1";
 
   console.log(`Building ${params.configName} Desktop App`);
 
@@ -173,7 +174,7 @@ module.exports.buildConfig = function buildConfig(params) {
   const rendererConfig = {
     name: "renderer",
     mode: NODE_ENV,
-    devtool: "source-map",
+    devtool: lowMemoryBuild ? false : "source-map",
     target: "web",
     node: {
       __dirname: false,
@@ -188,6 +189,7 @@ module.exports.buildConfig = function buildConfig(params) {
     optimization: {
       minimizer: [
         new TerserPlugin({
+          parallel: lowMemoryBuild ? false : true,
           terserOptions: {
             // Replicate Angular CLI behaviour
             compress: {
@@ -260,7 +262,7 @@ module.exports.buildConfig = function buildConfig(params) {
             {
               loader: "postcss-loader",
               options: {
-                sourceMap: true,
+                sourceMap: !lowMemoryBuild,
               },
             },
           ],
@@ -279,7 +281,7 @@ module.exports.buildConfig = function buildConfig(params) {
             {
               loader: "sass-loader",
               options: {
-                sourceMap: true,
+                sourceMap: !lowMemoryBuild,
               },
             },
           ],
@@ -305,7 +307,7 @@ module.exports.buildConfig = function buildConfig(params) {
       new AngularWebpackPlugin({
         tsconfig: params.renderer.tsConfig,
         entryModule: params.renderer.entryModule,
-        sourceMap: true,
+        sourceMap: !lowMemoryBuild,
       }),
       // ref: https://github.com/angular/angular/issues/20357
       new webpack.ContextReplacementPlugin(
@@ -317,9 +319,13 @@ module.exports.buildConfig = function buildConfig(params) {
         filename: "index.html",
         chunks: ["app/vendor", "app/main"],
       }),
-      new webpack.SourceMapDevToolPlugin({
-        include: ["app/main.js"],
-      }),
+      ...(lowMemoryBuild
+        ? []
+        : [
+            new webpack.SourceMapDevToolPlugin({
+              include: ["app/main.js"],
+            }),
+          ]),
       new MiniCssExtractPlugin({
         filename: "[name].[contenthash].css",
         chunkFilename: "[id].[contenthash].css",

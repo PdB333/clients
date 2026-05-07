@@ -58,7 +58,6 @@ import { TokenService } from "@bitwarden/common/auth/abstractions/token.service"
 import { WebAuthnLoginPrfKeyServiceAbstraction } from "@bitwarden/common/auth/abstractions/webauthn/webauthn-login-prf-key.service.abstraction";
 import { PendingAuthRequestsStateService } from "@bitwarden/common/auth/services/auth-request-answering/pending-auth-requests.state";
 import { AutofillSettingsServiceAbstraction } from "@bitwarden/common/autofill/services/autofill-settings.service";
-import { BillingAccountProfileStateService } from "@bitwarden/common/billing/abstractions";
 import { ClientType } from "@bitwarden/common/enums";
 import { ProcessReloadServiceAbstraction } from "@bitwarden/common/key-management/abstractions/process-reload.service";
 import { AccountCryptographicStateService } from "@bitwarden/common/key-management/account-cryptography/account-cryptographic-state.service";
@@ -536,11 +535,9 @@ const safeProviders: SafeProvider[] = [
       AccountService,
       AuthService,
       CipherServiceAbstraction,
-      ConfigService,
       GlobalStateProvider,
       PlatformUtilsServiceAbstraction,
-      BillingAccountProfileStateService,
-      DesktopAutotypeDefaultSettingPolicy,
+      DialogService,
       LogService,
     ],
   }),

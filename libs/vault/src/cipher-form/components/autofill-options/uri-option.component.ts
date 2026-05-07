@@ -1,6 +1,7 @@
 // FIXME: Update this file to be type safe and remove this and next line
 // @ts-strict-ignore
 import { DragDropModule } from "@angular/cdk/drag-drop";
+import { NgForOf, NgIf } from "@angular/common";
 import {
   Component,
   ElementRef,
@@ -54,6 +55,8 @@ import { AdvancedUriOptionDialogComponent } from "./advanced-uri-option-dialog.c
     IconButtonModule,
     JslibModule,
     SelectModule,
+    NgForOf,
+    NgIf,
   ],
 })
 export class UriOptionComponent implements ControlValueAccessor {

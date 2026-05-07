@@ -6,6 +6,8 @@ import { of } from "rxjs";
 import { Argon2KdfConfig, PBKDF2KdfConfig } from "@bitwarden/key-management";
 
 import { ApiService } from "../../abstractions/api.service";
+import { HttpStatusCode } from "../../enums";
+import { ErrorResponse } from "../../models/response/error.response";
 import { Environment, EnvironmentService } from "../../platform/abstractions/environment.service";
 
 import { PasswordPreloginApiService } from "./password-prelogin-api.service";
@@ -108,6 +110,38 @@ describe("PasswordPreloginApiService", () => {
       apiService.send.mockRejectedValue(new Error("API Error"));
 
       await expect(sut.getPreloginData(request)).rejects.toThrow("API Error");
+    });
+
+    it("falls back to legacy prelogin endpoint when /accounts/prelogin/password returns 404", async () => {
+      const request = new PasswordPreloginRequest("user@example.com");
+      apiService.send
+        .mockRejectedValueOnce(new ErrorResponse(null, HttpStatusCode.NotFound))
+        .mockResolvedValueOnce({
+          Kdf: 0,
+          KdfIterations: PBKDF2KdfConfig.ITERATIONS.defaultValue,
+        });
+
+      const result = await sut.getPreloginData(request);
+
+      expect(result).toBeInstanceOf(PasswordPreloginResponse);
+      expect(apiService.send).toHaveBeenNthCalledWith(
+        1,
+        "POST",
+        "/accounts/prelogin/password",
+        request,
+        false,
+        true,
+        identityUrl,
+      );
+      expect(apiService.send).toHaveBeenNthCalledWith(
+        2,
+        "POST",
+        "/accounts/prelogin",
+        request,
+        false,
+        true,
+        identityUrl,
+      );
     });
   });
 });

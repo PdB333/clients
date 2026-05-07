@@ -5,7 +5,7 @@ import { firstValueFrom, of, Subject } from "rxjs";
 import { CollectionService, OrganizationUserApiService } from "@bitwarden/admin-console/common";
 import { OrganizationService } from "@bitwarden/common/admin-console/abstractions/organization/organization.service.abstraction";
 import { PolicyService } from "@bitwarden/common/admin-console/abstractions/policy/policy.service.abstraction";
-import { OrganizationUserStatusType, PolicyType } from "@bitwarden/common/admin-console/enums";
+import { PolicyType } from "@bitwarden/common/admin-console/enums";
 import { CollectionView } from "@bitwarden/common/admin-console/models/collections";
 import { Organization } from "@bitwarden/common/admin-console/models/domain/organization";
 import { Policy } from "@bitwarden/common/admin-console/models/domain/policy";
@@ -150,13 +150,7 @@ describe("DefaultVaultItemsTransferService", () => {
               data: { enableIndividualItemsTransfer: false },
             } as Policy,
           ],
-          organizations: [
-            {
-              id: organizationId,
-              name: "Test Org",
-              status: OrganizationUserStatusType.Confirmed,
-            } as Organization,
-          ],
+          organizations: [{ id: organizationId, name: "Test Org" } as Organization],
           ciphers: [{ id: "cipher-1" } as CipherView],
         });
       });
@@ -178,13 +172,7 @@ describe("DefaultVaultItemsTransferService", () => {
               data: {},
             } as Policy,
           ],
-          organizations: [
-            {
-              id: organizationId,
-              name: "Test Org",
-              status: OrganizationUserStatusType.Confirmed,
-            } as Organization,
-          ],
+          organizations: [{ id: organizationId, name: "Test Org" } as Organization],
           ciphers: [{ id: "cipher-1" } as CipherView],
         });
       });
@@ -205,7 +193,6 @@ describe("DefaultVaultItemsTransferService", () => {
       const organization = {
         id: organizationId,
         name: "Test Org",
-        status: OrganizationUserStatusType.Confirmed,
       } as Organization;
 
       beforeEach(() => {
@@ -285,36 +272,6 @@ describe("DefaultVaultItemsTransferService", () => {
       });
     });
 
-    describe("when user is not in confirmed status", () => {
-      const policy = {
-        organizationId: organizationId,
-        revisionDate: new Date("2024-01-01"),
-        data: { enableIndividualItemsTransfer: true },
-      } as Policy;
-
-      it.each([
-        OrganizationUserStatusType.Accepted,
-        OrganizationUserStatusType.Invited,
-        OrganizationUserStatusType.Revoked,
-      ])("returns requiresMigration: false when user status is %s", async (status) => {
-        const organization = {
-          id: organizationId,
-          name: "Test Org",
-          status,
-        } as Organization;
-
-        setupMocksForMigrationScenario({
-          policies: [policy],
-          organizations: [organization],
-          ciphers: [{ id: "cipher-1" } as CipherView],
-        });
-
-        const result = await firstValueFrom(service.userMigrationInfo$(userId));
-
-        expect(result).toEqual({ requiresMigration: false });
-      });
-    });
-
     describe("when multiple policies exist", () => {
       const oldestPolicy = {
         organizationId: "oldest-org-id" as OrganizationId,
@@ -334,17 +291,14 @@ describe("DefaultVaultItemsTransferService", () => {
       const oldestOrganization = {
         id: "oldest-org-id" as OrganizationId,
         name: "Oldest Org",
-        status: OrganizationUserStatusType.Confirmed,
       } as Organization;
       const olderOrganization = {
         id: "older-org-id" as OrganizationId,
         name: "Older Org",
-        status: OrganizationUserStatusType.Confirmed,
       } as Organization;
       const newerOrganization = {
         id: organizationId,
         name: "Newer Org",
-        status: OrganizationUserStatusType.Confirmed,
       } as Organization;
 
       beforeEach(() => {
@@ -649,7 +603,6 @@ describe("DefaultVaultItemsTransferService", () => {
     const organization = {
       id: organizationId,
       name: "Test Org",
-      status: OrganizationUserStatusType.Confirmed,
     } as Organization;
 
     function setupMocksForEnforcementScenario(options: {
@@ -961,7 +914,6 @@ describe("DefaultVaultItemsTransferService", () => {
     const organization = {
       id: organizationId,
       name: "Test Org",
-      status: OrganizationUserStatusType.Confirmed,
     } as Organization;
 
     function setupMocksForTransferScenario(options: {
@@ -1048,7 +1000,6 @@ describe("DefaultVaultItemsTransferService", () => {
     const organization = {
       id: organizationId,
       name: "Test Org",
-      status: OrganizationUserStatusType.Confirmed,
     } as Organization;
     const personalCiphers = [{ id: "cipher-1" } as CipherView];
     const defaultCollection = {

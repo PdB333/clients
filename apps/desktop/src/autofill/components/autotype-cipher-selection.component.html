@@ -1,0 +1,22 @@
+<bit-dialog>
+  <span bitDialogTitle>{{ "autotypeSelectCipherTitle" | i18n }}</span>
+  <div bitDialogContent>
+    <p>{{ "autotypeSelectCipherDesc" | i18n }}</p>
+    <div class="tw-flex tw-flex-col tw-gap-2">
+      <button
+        type="button"
+        bitButton
+        buttonType="secondary"
+        *ngFor="let option of data.options"
+        (click)="select(option.index)"
+      >
+        {{ getOptionLabel(option) }}
+      </button>
+    </div>
+  </div>
+  <ng-container bitDialogFooter>
+    <button type="button" bitButton buttonType="secondary" (click)="cancel()">
+      {{ "cancel" | i18n }}
+    </button>
+  </ng-container>
+</bit-dialog>

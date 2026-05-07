@@ -1,4 +1,4 @@
-<bit-banner variant="warning" (dismiss)="onDismiss.emit()">
+<bit-banner bannerType="warning" (onClose)="onDismiss.emit()">
   {{ "verifyEmailDesc" | i18n }}
   <button
     id="sendBtn"

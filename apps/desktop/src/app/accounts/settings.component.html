@@ -312,7 +312,6 @@
                       <div>
                         <code>{{ form.value.autotypeShortcut }}</code>
                       </div>
-                      <app-premium-badge></app-premium-badge>
                     </div>
                   </label>
                 </div>
@@ -329,6 +328,19 @@
                     {{ "editShortcut" | i18n }}
                   </a></small
                 >
+              </div>
+              <div class="form-group" *ngIf="showEnableAutotype && form.value.enableAutotype">
+                <label for="autotypeSequenceMode">{{ "autotypeSequenceMode" | i18n }}</label>
+                <select
+                  id="autotypeSequenceMode"
+                  formControlName="autotypeSequenceMode"
+                  (change)="saveAutotypeSequenceMode()"
+                >
+                  <option *ngFor="let o of autotypeSequenceModeOptions" [ngValue]="o.value">
+                    {{ o.name }}
+                  </option>
+                </select>
+                <small class="help-block">{{ "autotypeSequenceModeDesc" | i18n }}</small>
               </div>
               <div class="form-group">
                 <div class="checkbox">

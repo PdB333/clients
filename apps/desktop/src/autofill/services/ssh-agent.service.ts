@@ -80,6 +80,16 @@ export class SshAgentService implements OnDestroy {
     await this.initListeners();
   }
 
+  private async clearKeysIfLoaded(): Promise<void> {
+    try {
+      if (await ipc.autofill.sshAgent.isLoaded()) {
+        await ipc.autofill.sshAgent.clearKeys();
+      }
+    } catch (e) {
+      this.logService.error("Failed to clear SSH keys", e);
+    }
+  }
+
   private async initListeners() {
     // Shared: sign request approval — renderer shows the approval dialog.
     // Contains v1-only sections marked below; see sshagent.unlockrequest for the v2 unlock flow.
@@ -266,22 +276,16 @@ export class SshAgentService implements OnDestroy {
       next: (account) => {
         this.authorizedSshKeys = {};
         this.logService.info("Active account changed, clearing SSH keys");
-        ipc.autofill.sshAgent
-          .clearKeys()
-          .catch((e) => this.logService.error("Failed to clear SSH keys", e));
+        void this.clearKeysIfLoaded();
       },
       error: (e: unknown) => {
         this.logService.error("Error in active account observable", e);
-        ipc.autofill.sshAgent
-          .clearKeys()
-          .catch((e) => this.logService.error("Failed to clear SSH keys", e));
+        void this.clearKeysIfLoaded();
       },
       complete: () => {
         this.logService.info("Active account observable completed, clearing SSH keys");
         this.authorizedSshKeys = {};
-        ipc.autofill.sshAgent
-          .clearKeys()
-          .catch((e) => this.logService.error("Failed to clear SSH keys", e));
+        void this.clearKeysIfLoaded();
       },
     });
 
@@ -293,7 +297,7 @@ export class SshAgentService implements OnDestroy {
       .pipe(
         concatMap(async ([, enabled]) => {
           if (!enabled) {
-            await ipc.autofill.sshAgent.clearKeys();
+            await this.clearKeysIfLoaded();
             return;
           }
 

@@ -50,7 +50,6 @@ export class OrgImportComponent implements OnInit {
   protected routeOrgId: OrganizationId | undefined = undefined;
   protected loading = false;
   protected disabled = false;
-  protected returnTo: string | undefined = undefined;
 
   constructor(
     private route: ActivatedRoute,
@@ -70,7 +69,6 @@ export class OrgImportComponent implements OnInit {
     }
 
     this.routeOrgId = orgIdParam;
-    this.returnTo = this.route.snapshot.queryParamMap.get("returnTo") ?? undefined;
   }
 
   /**

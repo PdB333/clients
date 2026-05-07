@@ -5,7 +5,6 @@ import {
   AfterViewInit,
   Component,
   EventEmitter,
-  model,
   Input,
   OnDestroy,
   OnInit,
@@ -74,7 +73,7 @@ import {
 
 import { EncryptedExportType } from "../enums/encrypted-export-type.enum";
 
-import { ExportScopeDescriptionComponent } from "./export-scope-description.component";
+import { ExportScopeCalloutComponent } from "./export-scope-callout.component";
 
 // FIXME(https://bitwarden.atlassian.net/browse/CL-764): Migrate to OnPush
 // eslint-disable-next-line @angular-eslint/prefer-on-push-component-change-detection
@@ -92,7 +91,7 @@ import { ExportScopeDescriptionComponent } from "./export-scope-description.comp
     SelectModule,
     CalloutModule,
     RadioButtonModule,
-    ExportScopeDescriptionComponent,
+    ExportScopeCalloutComponent,
     PasswordStrengthV2Component,
     GeneratorServicesModule,
     CopyClickDirective,
@@ -141,7 +140,7 @@ export class ExportComponent implements OnInit, OnDestroy, AfterViewInit {
 
   get orgExportDescription(): string {
     if (!this._showExcludeMyItems) {
-      return "exportingOrganizationVaultScopeDescription";
+      return "exportingOrganizationVaultDesc";
     }
     return this.isAdminConsoleContext
       ? "exportingOrganizationVaultFromAdminConsoleWithDataOwnershipDesc"
@@ -197,8 +196,6 @@ export class ExportComponent implements OnInit, OnDestroy, AfterViewInit {
   // eslint-disable-next-line @angular-eslint/prefer-output-emitter-ref
   @Output()
   onSuccessfulExport = new EventEmitter<OrganizationId | undefined>();
-
-  readonly skippedAttachmentCount = model(0);
 
   // TODO: Fix this the next time the file is edited.
   // eslint-disable-next-line @angular-eslint/prefer-signals
@@ -543,11 +540,6 @@ export class ExportComponent implements OnInit, OnDestroy, AfterViewInit {
       // Download the export file
       this.downloadFile(data);
 
-      // Track skipped attachments for inline warning callout
-      if (data.type === "application/zip" && data.skippedAttachmentCount) {
-        this.skippedAttachmentCount.set(data.skippedAttachmentCount);
-      }
-
       this.toastService.showToast({
         variant: "success",
         title: null,
@@ -676,13 +668,6 @@ export class ExportComponent implements OnInit, OnDestroy, AfterViewInit {
 
   get fileEncryptionType() {
     return this.exportForm.get("fileEncryptionType").value;
-  }
-
-  get skippedAttachmentMessage(): string {
-    const count = this.skippedAttachmentCount();
-    return count === 1
-      ? this.i18nService.t("exportSuccessSkippedAttachment")
-      : this.i18nService.t("exportSuccessSkippedAttachments", count);
   }
 
   adjustValidators() {

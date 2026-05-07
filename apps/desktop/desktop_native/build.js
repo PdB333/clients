@@ -39,6 +39,15 @@ function runCommand(bin, args, workingDirectory = "", useShell = false) {
     child_process.execFileSync(bin, args, options)
 }
 
+function resolveCargoTargetRoot() {
+    if (process.env.CARGO_TARGET_DIR) {
+        return path.isAbsolute(process.env.CARGO_TARGET_DIR)
+            ? process.env.CARGO_TARGET_DIR
+            : path.resolve(__dirname, process.env.CARGO_TARGET_DIR);
+    }
+    return path.join(__dirname, "target");
+}
+
 function buildNapiModule(target, release = true) {
     const targetArg = target ? `--target=${target}` : "";
     const releaseArg = release ? "--release" : "";
@@ -79,7 +88,7 @@ function cargoBuild(bin, target, release) {
     // Copy the resulting binary to the dist folder
     const profileFolder = isRelease ? "release" : "debug";
     const ext = platform === "win32" ? ".exe" : "";
-    const src = path.join(__dirname, "target", target ? target : "", profileFolder, `${bin}${ext}`)
+    const src = path.join(resolveCargoTargetRoot(), target ? target : "", profileFolder, `${bin}${ext}`)
     const dst = path.join(__dirname, "dist", `${bin}.${platform}-${nodeArch}${ext}`)
     console.log(`Copying ${src} to ${dst}`);
     fs.copyFileSync(src, dst);
@@ -96,15 +105,20 @@ function buildImporterBinaries(target, release = true) {
     }
 }
 
-function buildProcessIsolation() {
-    if (process.platform !== "linux") {
+function buildProcessIsolation(target) {
+    // process isolation library is only needed for Linux packages.
+    // Skip it for Windows/macOS targets to avoid unnecessary work and copy errors.
+    if (process.platform !== "linux" || effectivePlatform(target) !== "linux") {
         return;
     }
 
     runCommand("cargo", ["build", "--package", "process_isolation", "--release"]);
 
     console.log("Copying process isolation library to dist folder");
-    fs.copyFileSync(path.join(__dirname, "target", "release", "libprocess_isolation.so"), path.join(__dirname, "dist", `libprocess_isolation.so`));
+    fs.copyFileSync(
+        path.join(resolveCargoTargetRoot(), "release", "libprocess_isolation.so"),
+        path.join(__dirname, "dist", `libprocess_isolation.so`),
+    );
 }
 
 function installTarget(target) {
@@ -131,7 +145,7 @@ if (!crossPlatform && !target) {
     buildNapiModule(false, mode === "release");
     buildProxyBin(false, mode === "release");
     buildImporterBinaries(false, mode === "release");
-    buildProcessIsolation();
+    buildProcessIsolation(null);
     return;
 }
 
@@ -141,7 +155,7 @@ if (target) {
     buildNapiModule(target, isRelease);
     buildProxyBin(target, isRelease);
     buildImporterBinaries(target, isRelease);
-    buildProcessIsolation();
+    buildProcessIsolation(target);
     return;
 }
 
@@ -160,5 +174,5 @@ platformTargets.forEach(([target, _]) => {
     buildNapiModule(target, isRelease);
     buildProxyBin(target, isRelease);
     buildImporterBinaries(target, isRelease);
-    buildProcessIsolation();
+    buildProcessIsolation(target);
 });

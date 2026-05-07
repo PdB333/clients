@@ -9,13 +9,8 @@
     {{ "new" | i18n }}
   </button>
 } @else {
-  <button
-    bitButton
-    startIcon="bwi-plus"
-    [bitMenuTriggerFor]="itemOptions"
-    buttonType="primary"
-    type="button"
-  >
+  <button bitButton [bitMenuTriggerFor]="itemOptions" buttonType="primary" type="button">
+    <i class="bwi bwi-plus tw-me-2" aria-hidden="true"></i>
     {{ "new" | i18n }}
   </button>
   <bit-menu #itemOptions>

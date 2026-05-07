@@ -1,4 +1,4 @@
-import { forkJoin, map, Observable, of, switchMap, take, throwError } from "rxjs";
+import { firstValueFrom, forkJoin, from, map, Observable, of, switchMap, throwError } from "rxjs";
 
 import { AccountService } from "@bitwarden/common/auth/abstractions/account.service";
 import { getUserId } from "@bitwarden/common/auth/services/account.service";
@@ -35,13 +35,19 @@ export class DefaultReportPersistenceService extends ReportPersistenceService {
       organizationId,
     });
 
-    return getUserId(this.accountService.activeAccount$).pipe(
-      take(1),
-      switchMap((userId) =>
-        AccessReport.fromView$(view, this.riskInsightsEncryptionService, {
-          organizationId,
-          userId,
-        }).pipe(
+    return from(firstValueFrom(getUserId(this.accountService.activeAccount$))).pipe(
+      switchMap((userId) => {
+        if (!userId) {
+          throw new Error("User ID not found");
+        }
+
+        // Encrypt view to domain model
+        return from(
+          AccessReport.fromView(view, this.riskInsightsEncryptionService, {
+            organizationId,
+            userId,
+          }),
+        ).pipe(
           switchMap((domain) => {
             if (!domain.contentEncryptionKey) {
               return throwError(() => new Error("Report encryption key not found"));
@@ -72,8 +78,8 @@ export class DefaultReportPersistenceService extends ReportPersistenceService {
                 })),
               );
           }),
-        ),
-      ),
+        );
+      }),
     );
   }
 
@@ -84,13 +90,19 @@ export class DefaultReportPersistenceService extends ReportPersistenceService {
       applicationCount: view.applications.length,
     });
 
-    return getUserId(this.accountService.activeAccount$).pipe(
-      take(1),
-      switchMap((userId) =>
-        AccessReport.fromView$(view, this.riskInsightsEncryptionService, {
-          organizationId: view.organizationId,
-          userId,
-        }).pipe(
+    return from(firstValueFrom(getUserId(this.accountService.activeAccount$))).pipe(
+      switchMap((userId) => {
+        if (!userId) {
+          throw new Error("User ID not found");
+        }
+
+        // Encrypt view to domain model
+        return from(
+          AccessReport.fromView(view, this.riskInsightsEncryptionService, {
+            organizationId: view.organizationId,
+            userId,
+          }),
+        ).pipe(
           switchMap((domain) => {
             const data = domain.toData();
             const metrics = view.toMetrics();
@@ -121,20 +133,24 @@ export class DefaultReportPersistenceService extends ReportPersistenceService {
               map(() => undefined as void),
             );
           }),
-        ),
-      ),
+        );
+      }),
     );
   }
 
-  loadLastReport$(
+  // TODO Rename to loadLastReport$
+  loadReport$(
     organizationId: OrganizationId,
   ): Observable<{ report: AccessReportView; hadLegacyBlobs: boolean } | null> {
     this.logService.debug("[DefaultReportPersistenceService] Loading report", { organizationId });
 
-    return getUserId(this.accountService.activeAccount$).pipe(
-      take(1),
-      switchMap((userId) =>
-        this.riskInsightsApiService.getRiskInsightsReport$(organizationId).pipe(
+    return from(firstValueFrom(getUserId(this.accountService.activeAccount$))).pipe(
+      switchMap((userId) => {
+        if (!userId) {
+          throw new Error("User ID not found");
+        }
+
+        return this.riskInsightsApiService.getRiskInsightsReport$(organizationId).pipe(
           switchMap((apiResponse) => {
             if (!apiResponse) {
               return of(null);
@@ -161,12 +177,12 @@ export class DefaultReportPersistenceService extends ReportPersistenceService {
             const domain = new AccessReport(data);
 
             // Domain handles its own decryption
-            return domain
-              .decrypt$(this.riskInsightsEncryptionService, { organizationId, userId })
-              .pipe(map(({ view, hadLegacyBlobs }) => ({ report: view, hadLegacyBlobs })));
+            return from(
+              domain.decrypt(this.riskInsightsEncryptionService, { organizationId, userId }),
+            ).pipe(map(({ view, hadLegacyBlobs }) => ({ report: view, hadLegacyBlobs })));
           }),
-        ),
-      ),
+        );
+      }),
     );
   }
 }

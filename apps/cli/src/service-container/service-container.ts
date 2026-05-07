@@ -650,6 +650,12 @@ export class ServiceContainer {
       this.configService,
     );
 
+    this.cipherFileUploadService = new CipherFileUploadService(
+      this.apiService,
+      this.fileUploadService,
+      this.configService,
+    );
+
     this.sendApiService = this.sendApiService = new SendApiService(
       this.apiService,
       this.fileUploadService,
@@ -880,13 +886,6 @@ export class ServiceContainer {
 
     this.cipherSdkService = new DefaultCipherSdkService(this.sdkService, this.logService);
 
-    this.cipherFileUploadService = new CipherFileUploadService(
-      this.apiService,
-      this.fileUploadService,
-      this.configService,
-      this.cipherSdkService,
-    );
-
     this.cipherService = new CipherService(
       this.keyService,
       this.domainSettingsService,
@@ -1040,7 +1039,6 @@ export class ServiceContainer {
       this.kdfConfigService,
       this.apiService,
       this.restrictedItemTypesService,
-      this.logService,
     );
 
     this.vaultExportApiService = new DefaultVaultExportApiService(this.apiService);

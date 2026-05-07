@@ -47,6 +47,8 @@ export abstract class CipherService implements UserKeyRotationDataProvider<Ciphe
   abstract encrypt(
     model: CipherView,
     userId: UserId,
+    keyForEncryption?: SymmetricCryptoKey,
+    keyForCipherKeyDecryption?: SymmetricCryptoKey,
     originalCipher?: Cipher,
   ): Promise<EncryptionContext>;
   /**

@@ -1,5 +1,6 @@
 // FIXME: Update this file to be type safe and remove this and next line
 // @ts-strict-ignore
+import { NgIf } from "@angular/common";
 import {
   AfterViewInit,
   ChangeDetectorRef,
@@ -75,6 +76,7 @@ import { SshKeySectionComponent } from "./sshkey-section/sshkey-section.componen
     IdentitySectionComponent,
     SshKeySectionComponent,
     BankAccountSectionComponent,
+    NgIf,
     AdditionalOptionsSectionComponent,
     LoginDetailsSectionComponent,
     NewItemNudgeComponent,

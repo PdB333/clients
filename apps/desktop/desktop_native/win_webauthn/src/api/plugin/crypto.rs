@@ -255,7 +255,6 @@ impl Drop for NCryptKey {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct Signature<'a>(&'a [u8]);
 impl<'a> Signature<'a> {
     pub(crate) fn new(value: &'a [u8]) -> Signature<'a> {
@@ -263,7 +262,7 @@ impl<'a> Signature<'a> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(crate) struct OwnedRequestHash(pub(super) Vec<u8>);
 impl OwnedRequestHash {
     pub(crate) fn to_vec(&self) -> Vec<u8> {
@@ -276,8 +275,6 @@ impl<'a> From<&'a OwnedRequestHash> for RequestHash<'a> {
         RequestHash::new(&value.0)
     }
 }
-
-#[derive(Debug)]
 pub(crate) struct RequestHash<'a>(&'a [u8]);
 
 impl<'a> RequestHash<'a> {

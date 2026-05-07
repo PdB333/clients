@@ -9,6 +9,7 @@ import { LogService } from "@bitwarden/logging";
 import { WindowMain } from "../../main/window.main";
 import { AutotypeConfig } from "../models/autotype-config";
 import { AutotypeMatchError } from "../models/autotype-errors";
+import { AUTOTYPE_SEQUENCE_MODES } from "../models/autotype-sequence-mode";
 import { AutotypeVaultData } from "../models/autotype-vault-data";
 import { AUTOTYPE_IPC_CHANNELS } from "../models/ipc-channels";
 import { AutotypeKeyboardShortcut } from "../models/main-autotype-keyboard-shortcut";
@@ -144,6 +145,7 @@ describe("MainDesktopAutotypeService", () => {
     it("should update keyboard shortcut with valid configuration", () => {
       const config: AutotypeConfig = {
         keyboardShortcut: ["Control", "Alt", "A"],
+        sequenceMode: AUTOTYPE_SEQUENCE_MODES.USER_TAB_PASS,
       };
 
       const mockNewShortcut = {
@@ -162,6 +164,7 @@ describe("MainDesktopAutotypeService", () => {
     it("should log error with invalid keyboard shortcut", () => {
       const config: AutotypeConfig = {
         keyboardShortcut: ["Invalid", "Keys"],
+        sequenceMode: AUTOTYPE_SEQUENCE_MODES.USER_TAB_PASS,
       };
 
       const mockNewShortcut = {
@@ -187,6 +190,7 @@ describe("MainDesktopAutotypeService", () => {
 
       const config: AutotypeConfig = {
         keyboardShortcut: ["Control", "Alt", "B"],
+        sequenceMode: AUTOTYPE_SEQUENCE_MODES.USER_TAB_PASS,
       };
 
       const mockNewShortcut = {
@@ -206,6 +210,7 @@ describe("MainDesktopAutotypeService", () => {
     it("should not change shortcut if it is the same", () => {
       const config: AutotypeConfig = {
         keyboardShortcut: ["Control", "Alt", "B"],
+        sequenceMode: AUTOTYPE_SEQUENCE_MODES.USER_TAB_PASS,
       };
 
       jest
@@ -285,6 +290,54 @@ describe("MainDesktopAutotypeService", () => {
       const expectedPattern = "user\tpass";
       const expectedArray = Array.from(expectedPattern).map((c) => c.charCodeAt(0));
 
+      expect(autotype.typeInput).toHaveBeenCalledWith(expectedArray, ["Control", "Alt", "B"]);
+    });
+
+    it("should format input with enter when sequence mode requires it", () => {
+      const configureHandler = ipcHandlers.get(AUTOTYPE_IPC_CHANNELS.CONFIGURE);
+      configureHandler({}, {
+        keyboardShortcut: ["Control", "Alt", "B"],
+        sequenceMode: AUTOTYPE_SEQUENCE_MODES.USER_TAB_PASS_ENTER,
+      } satisfies AutotypeConfig);
+
+      const vaultData: AutotypeVaultData = {
+        username: "user",
+        password: "pass",
+      };
+
+      const executeHandler = ipcHandlers.get(AUTOTYPE_IPC_CHANNELS.EXECUTE);
+      executeHandler({}, vaultData);
+
+      const expectedPattern = "user\tpass\n";
+      const expectedArray = Array.from(expectedPattern).map((c) => c.charCodeAt(0));
+
+      expect(autotype.typeInput).toHaveBeenCalledWith(expectedArray, ["Control", "Alt", "B"]);
+    });
+
+    it("should fallback to default sequence when sequence mode is invalid", () => {
+      const configureHandler = ipcHandlers.get(AUTOTYPE_IPC_CHANNELS.CONFIGURE);
+      configureHandler(
+        {},
+        {
+          keyboardShortcut: ["Control", "Alt", "B"],
+          sequenceMode: "invalid-sequence-mode",
+        } as any,
+      );
+
+      const vaultData: AutotypeVaultData = {
+        username: "user",
+        password: "pass",
+      };
+
+      const executeHandler = ipcHandlers.get(AUTOTYPE_IPC_CHANNELS.EXECUTE);
+      executeHandler({}, vaultData);
+
+      const expectedPattern = "user\tpass";
+      const expectedArray = Array.from(expectedPattern).map((c) => c.charCodeAt(0));
+
+      expect(mockLogService.error).toHaveBeenCalledWith(
+        "Configure autotype failed: the sequence mode is invalid.",
+      );
       expect(autotype.typeInput).toHaveBeenCalledWith(expectedArray, ["Control", "Alt", "B"]);
     });
   });

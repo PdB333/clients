@@ -1,19 +1,18 @@
 import { TestBed } from "@angular/core/testing";
-import { BehaviorSubject } from "rxjs";
+import { BehaviorSubject, firstValueFrom, of } from "rxjs";
 
+import { DialogService } from "@bitwarden/components";
 import { AccountService } from "@bitwarden/common/auth/abstractions/account.service";
 import { AuthService } from "@bitwarden/common/auth/abstractions/auth.service";
 import { AuthenticationStatus } from "@bitwarden/common/auth/enums/authentication-status";
-import { BillingAccountProfileStateService } from "@bitwarden/common/billing/abstractions";
 import { DeviceType } from "@bitwarden/common/enums";
-import { ConfigService } from "@bitwarden/common/platform/abstractions/config/config.service";
 import { PlatformUtilsService } from "@bitwarden/common/platform/abstractions/platform-utils.service";
 import { GlobalStateProvider } from "@bitwarden/common/platform/state";
 import { CipherService } from "@bitwarden/common/vault/abstractions/cipher.service";
 import { CipherView } from "@bitwarden/common/vault/models/view/cipher.view";
 import { LogService } from "@bitwarden/logging";
 
-import { DesktopAutotypeDefaultSettingPolicy } from "./desktop-autotype-policy.service";
+import { AUTOTYPE_SEQUENCE_MODES } from "../models/autotype-sequence-mode";
 import { DesktopAutotypeService, getAutotypeVaultData } from "./desktop-autotype.service";
 
 describe("DesktopAutotypeService", () => {
@@ -23,38 +22,33 @@ describe("DesktopAutotypeService", () => {
   let mockAccountService: jest.Mocked<AccountService>;
   let mockAuthService: jest.Mocked<AuthService>;
   let mockCipherService: jest.Mocked<CipherService>;
-  let mockConfigService: jest.Mocked<ConfigService>;
+  let mockDialogService: jest.Mocked<DialogService>;
   let mockGlobalStateProvider: jest.Mocked<GlobalStateProvider>;
   let mockPlatformUtilsService: jest.Mocked<PlatformUtilsService>;
-  let mockBillingAccountProfileStateService: jest.Mocked<BillingAccountProfileStateService>;
-  let mockDesktopAutotypePolicy: jest.Mocked<DesktopAutotypeDefaultSettingPolicy>;
   let mockLogService: jest.Mocked<LogService>;
 
   // Mock GlobalState objects
   let mockAutotypeEnabledState: any;
   let mockAutotypeKeyboardShortcutState: any;
+  let mockAutotypeSequenceModeState: any;
 
   // BehaviorSubjects for reactive state
   let autotypeEnabledSubject: BehaviorSubject<boolean | null>;
   let autotypeKeyboardShortcutSubject: BehaviorSubject<string[]>;
+  let autotypeSequenceModeSubject: BehaviorSubject<string>;
   let activeAccountSubject: BehaviorSubject<any>;
   let activeAccountStatusSubject: BehaviorSubject<AuthenticationStatus>;
-  let hasPremiumSubject: BehaviorSubject<boolean>;
-  let featureFlagSubject: BehaviorSubject<boolean>;
-  let autotypeDefaultPolicySubject: BehaviorSubject<boolean>;
   let cipherViewsSubject: BehaviorSubject<any[]>;
 
   beforeEach(() => {
     // Initialize BehaviorSubjects
     autotypeEnabledSubject = new BehaviorSubject<boolean | null>(null);
     autotypeKeyboardShortcutSubject = new BehaviorSubject<string[]>(["Control", "Shift", "B"]);
+    autotypeSequenceModeSubject = new BehaviorSubject<string>(AUTOTYPE_SEQUENCE_MODES.USER_TAB_PASS);
     activeAccountSubject = new BehaviorSubject<any>({ id: "user-123" });
     activeAccountStatusSubject = new BehaviorSubject<AuthenticationStatus>(
       AuthenticationStatus.Unlocked,
     );
-    hasPremiumSubject = new BehaviorSubject<boolean>(true);
-    featureFlagSubject = new BehaviorSubject<boolean>(true);
-    autotypeDefaultPolicySubject = new BehaviorSubject<boolean>(false);
     cipherViewsSubject = new BehaviorSubject<any[]>([]);
 
     // Mock GlobalState objects
@@ -82,6 +76,15 @@ describe("DesktopAutotypeService", () => {
       }),
     };
 
+    mockAutotypeSequenceModeState = {
+      state$: autotypeSequenceModeSubject.asObservable(),
+      update: jest.fn().mockImplementation(async (configureState) => {
+        const newState = configureState(autotypeSequenceModeSubject.value, null);
+        autotypeSequenceModeSubject.next(newState);
+        return newState;
+      }),
+    };
+
     // Mock GlobalStateProvider
     mockGlobalStateProvider = {
       get: jest.fn().mockImplementation((keyDef) => {
@@ -90,6 +93,9 @@ describe("DesktopAutotypeService", () => {
         }
         if (keyDef.key === "autotypeKeyboardShortcut") {
           return mockAutotypeKeyboardShortcutState;
+        }
+        if (keyDef.key === "autotypeSequenceMode") {
+          return mockAutotypeSequenceModeState;
         }
       }),
     } as any;
@@ -109,24 +115,13 @@ describe("DesktopAutotypeService", () => {
       cipherViews$: jest.fn().mockReturnValue(cipherViewsSubject.asObservable()),
     } as any;
 
-    // Mock ConfigService
-    mockConfigService = {
-      getFeatureFlag$: jest.fn().mockReturnValue(featureFlagSubject.asObservable()),
-    } as any;
-
     // Mock PlatformUtilsService
     mockPlatformUtilsService = {
       getDevice: jest.fn().mockReturnValue(DeviceType.WindowsDesktop),
     } as any;
 
-    // Mock BillingAccountProfileStateService
-    mockBillingAccountProfileStateService = {
-      hasPremiumFromAnySource$: jest.fn().mockReturnValue(hasPremiumSubject.asObservable()),
-    } as any;
-
-    // Mock DesktopAutotypeDefaultSettingPolicy
-    mockDesktopAutotypePolicy = {
-      autotypeDefaultSetting$: autotypeDefaultPolicySubject.asObservable(),
+    mockDialogService = {
+      open: jest.fn(),
     } as any;
 
     // Mock LogService
@@ -151,14 +146,9 @@ describe("DesktopAutotypeService", () => {
         { provide: AccountService, useValue: mockAccountService },
         { provide: AuthService, useValue: mockAuthService },
         { provide: CipherService, useValue: mockCipherService },
-        { provide: ConfigService, useValue: mockConfigService },
+        { provide: DialogService, useValue: mockDialogService },
         { provide: GlobalStateProvider, useValue: mockGlobalStateProvider },
         { provide: PlatformUtilsService, useValue: mockPlatformUtilsService },
-        {
-          provide: BillingAccountProfileStateService,
-          useValue: mockBillingAccountProfileStateService,
-        },
-        { provide: DesktopAutotypeDefaultSettingPolicy, useValue: mockDesktopAutotypePolicy },
         { provide: LogService, useValue: mockLogService },
       ],
     });
@@ -179,6 +169,15 @@ describe("DesktopAutotypeService", () => {
     it("should initialize observables", () => {
       expect(service.autotypeEnabledUserSetting$).toBeDefined();
       expect(service.autotypeKeyboardShortcut$).toBeDefined();
+      expect(service.autotypeSequenceMode$).toBeDefined();
+    });
+
+    it("should fallback to default sequence mode when stored state is invalid", async () => {
+      autotypeSequenceModeSubject.next("invalid-sequence-mode");
+
+      await expect(firstValueFrom(service.autotypeSequenceMode$)).resolves.toEqual(
+        AUTOTYPE_SEQUENCE_MODES.USER_TAB_PASS,
+      );
     });
   });
 
@@ -217,17 +216,76 @@ describe("DesktopAutotypeService", () => {
       expect(global.ipc.autofill.toggleAutotype).toHaveBeenCalled();
     });
 
-    it("should enable autotype when policy is true and user setting is null", async () => {
-      autotypeEnabledSubject.next(null);
-      autotypeDefaultPolicySubject.next(true);
+    it("should open a selection dialog when multiple ciphers match", async () => {
+      const mockCiphers = [
+        {
+          name: "A",
+          login: {
+            username: "user1",
+            password: "pass1",
+            uris: [{ uri: "apptitle://notepad" }],
+          },
+          deletedDate: null,
+        },
+        {
+          name: "B",
+          login: {
+            username: "user2",
+            password: "pass2",
+            uris: [{ uri: "apptitle://notepad" }],
+          },
+          deletedDate: null,
+        },
+      ];
+      cipherViewsSubject.next(mockCiphers);
+      mockDialogService.open.mockReturnValue({ closed: of(1) } as any);
 
       await service.init();
 
-      // Allow observables to emit
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      const listenerCallback = (global.ipc.autofill.listenAutotypeRequest as jest.Mock).mock.calls[0][0];
+      const completeCallback = jest.fn();
+      await listenerCallback("Notepad", completeCallback);
 
-      expect(mockAutotypeEnabledState.update).toHaveBeenCalled();
-      expect(autotypeEnabledSubject.value).toBe(true);
+      expect(mockDialogService.open).toHaveBeenCalled();
+      expect(completeCallback).toHaveBeenCalledWith(null, {
+        username: "user2",
+        password: "pass2",
+      });
+    });
+
+    it("should return an error when multiple ciphers match and user cancels selection", async () => {
+      const mockCiphers = [
+        {
+          name: "A",
+          login: {
+            username: "user1",
+            password: "pass1",
+            uris: [{ uri: "apptitle://notepad" }],
+          },
+          deletedDate: null,
+        },
+        {
+          name: "B",
+          login: {
+            username: "user2",
+            password: "pass2",
+            uris: [{ uri: "apptitle://notepad" }],
+          },
+          deletedDate: null,
+        },
+      ];
+      cipherViewsSubject.next(mockCiphers);
+      mockDialogService.open.mockReturnValue({ closed: of(null) } as any);
+
+      await service.init();
+
+      const listenerCallback = (global.ipc.autofill.listenAutotypeRequest as jest.Mock).mock.calls[0][0];
+      const completeCallback = jest.fn();
+      await listenerCallback("Notepad", completeCallback);
+
+      expect(mockDialogService.open).toHaveBeenCalled();
+      expect(completeCallback).toHaveBeenCalledWith(expect.any(Error), null);
+      expect(completeCallback.mock.calls[0][0].message).toBe("No matching vault item.");
     });
   });
 
@@ -258,6 +316,24 @@ describe("DesktopAutotypeService", () => {
 
       expect(mockAutotypeKeyboardShortcutState.update).toHaveBeenCalled();
       expect(autotypeKeyboardShortcutSubject.value).toEqual(newShortcut);
+    });
+  });
+
+  describe("setAutotypeSequenceModeState", () => {
+    it("should update sequence mode state", async () => {
+      await service.setAutotypeSequenceModeState(AUTOTYPE_SEQUENCE_MODES.USER_TAB_PASS_ENTER);
+
+      expect(mockAutotypeSequenceModeState.update).toHaveBeenCalled();
+      expect(autotypeSequenceModeSubject.value).toEqual(
+        AUTOTYPE_SEQUENCE_MODES.USER_TAB_PASS_ENTER,
+      );
+    });
+
+    it("should not update on invalid sequence mode", async () => {
+      await service.setAutotypeSequenceModeState("invalid" as any);
+
+      expect(mockAutotypeSequenceModeState.update).not.toHaveBeenCalled();
+      expect(mockLogService.error).toHaveBeenCalledWith("Autotype sequence mode is invalid.");
     });
   });
 

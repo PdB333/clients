@@ -9,7 +9,6 @@ import { KeyGenerationService } from "@bitwarden/common/key-management/crypto";
 import { CryptoFunctionService } from "@bitwarden/common/key-management/crypto/abstractions/crypto-function.service";
 import { EncryptService } from "@bitwarden/common/key-management/crypto/abstractions/encrypt.service";
 import { CipherWithIdExport, FolderWithIdExport } from "@bitwarden/common/models/export";
-import { LogService } from "@bitwarden/common/platform/abstractions/log.service";
 import { Utils } from "@bitwarden/common/platform/misc/utils";
 import { CipherId, UserId } from "@bitwarden/common/types/guid";
 import { CipherService } from "@bitwarden/common/vault/abstractions/cipher.service";
@@ -50,7 +49,6 @@ export class IndividualVaultExportService
     kdfConfigService: KdfConfigService,
     private apiService: ApiService,
     private restrictedItemTypesService: RestrictedItemTypesService,
-    private logService: LogService,
   ) {
     super(keyGenerationService, encryptService, cryptoFunctionService, kdfConfigService);
   }
@@ -107,8 +105,6 @@ export class IndividualVaultExportService
     }
 
     // attachments
-    let skippedAttachmentCount = 0;
-
     for (const cipher of await this.cipherService.getAllDecrypted(activeUserId)) {
       if (
         !cipher.attachments ||
@@ -121,9 +117,9 @@ export class IndividualVaultExportService
 
       const cipherFolder = attachmentsFolder.folder(cipher.id);
       for (const attachment of cipher.attachments) {
-        try {
-          const response = await this.downloadAttachment(cipher.id, attachment.id);
+        const response = await this.downloadAttachment(cipher.id, attachment.id);
 
+        try {
           const decBuf = await this.cipherService.getDecryptedAttachmentBuffer(
             cipher.id as CipherId,
             attachment,
@@ -132,9 +128,8 @@ export class IndividualVaultExportService
           );
 
           cipherFolder.file(attachment.fileName, decBuf);
-        } catch (error) {
-          this.logService.error(`Failed to export attachment: Cipher Id: ${cipher.id}`, error);
-          skippedAttachmentCount++;
+        } catch {
+          throw new Error("Error decrypting attachment");
         }
       }
     }
@@ -145,7 +140,6 @@ export class IndividualVaultExportService
       type: "application/zip",
       data: blobData,
       fileName: ExportHelper.getFileName("", "zip"),
-      skippedAttachmentCount: skippedAttachmentCount > 0 ? skippedAttachmentCount : undefined,
     } as ExportedVaultAsBlob;
   }
 

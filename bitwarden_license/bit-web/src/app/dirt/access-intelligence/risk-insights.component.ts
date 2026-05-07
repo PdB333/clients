@@ -123,8 +123,6 @@ export class RiskInsightsComponent implements OnInit, OnDestroy {
   // Minimum time to display each progress step (in milliseconds)
   private readonly STEP_DISPLAY_DELAY_MS = 250;
 
-  private readonly invokedFrom = signal<{ source: string; status: string } | null>(null);
-
   // TODO: See https://github.com/bitwarden/clients/pull/16832#discussion_r2474523235
 
   constructor(
@@ -138,14 +136,9 @@ export class RiskInsightsComponent implements OnInit, OnDestroy {
     private configService: ConfigService,
     private toastService: ToastService,
   ) {
-    this.route.queryParams
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(({ tabIndex, source, status }) => {
-        this.tabIndex = !isNaN(Number(tabIndex))
-          ? Number(tabIndex)
-          : RiskInsightsTabType.AllActivity;
-        this.invokedFrom.set({ source, status });
-      });
+    this.route.queryParams.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(({ tabIndex }) => {
+      this.tabIndex = !isNaN(Number(tabIndex)) ? Number(tabIndex) : RiskInsightsTabType.AllActivity;
+    });
   }
 
   async ngOnInit() {
@@ -257,10 +250,6 @@ export class RiskInsightsComponent implements OnInit, OnDestroy {
       .subscribe((step) => {
         this.currentProgressStep.set(step);
       });
-
-    if (this.invokedFrom()?.source && this.invokedFrom()?.status) {
-      this.handleReturnParams(this.invokedFrom()?.source, this.invokedFrom()?.status);
-    }
   }
 
   ngOnDestroy(): void {
@@ -297,10 +286,13 @@ export class RiskInsightsComponent implements OnInit, OnDestroy {
   // we want to add this new button as a second option on the empty state card
 
   goToImportPage = () => {
-    void this.router.navigate(
-      ["/organizations", this.organizationId, "settings", "tools", "import"],
-      { queryParams: { returnTo: "access-intelligence" } },
-    );
+    void this.router.navigate([
+      "/organizations",
+      this.organizationId,
+      "settings",
+      "tools",
+      "import",
+    ]);
   };
 
   /**
@@ -324,7 +316,7 @@ export class RiskInsightsComponent implements OnInit, OnDestroy {
         fileName: ExportHelper.getFileName("at-risk-members"),
         blobData: exportToCSV(drawerDetails.atRiskMemberDetails, {
           email: this.i18nService.t("email"),
-          atRiskPasswordCount: this.i18nService.t("atRiskApplications"),
+          atRiskPasswordCount: this.i18nService.t("atRiskPasswords"),
         }),
         blobOptions: { type: "text/plain" },
       });
@@ -364,22 +356,4 @@ export class RiskInsightsComponent implements OnInit, OnDestroy {
       this.logService.error("Failed to download at-risk applications", error);
     }
   };
-
-  private handleReturnParams(source: string | undefined, status: string | undefined): void {
-    if (source === "import" && status === "success") {
-      this.generateReport();
-    }
-
-    this.clearQueryParams(this.router, this.route, ["source", "status"]);
-  }
-
-  private clearQueryParams(router: Router, route: ActivatedRoute, params: string[]) {
-    // we don't want these params to persist in the URL after handling them, so we remove them
-    void this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: { source: null, status: null },
-      queryParamsHandling: "merge",
-      replaceUrl: true,
-    });
-  }
 }

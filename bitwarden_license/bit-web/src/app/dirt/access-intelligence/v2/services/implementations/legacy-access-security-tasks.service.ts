@@ -50,7 +50,6 @@ export class LegacyAccessSecurityTasksService extends AccessSecurityTasksService
             ? tasks.filter(
                 (task) =>
                   task.status === SecurityTaskStatus.Completed &&
-                  task.cipherId != null &&
                   new Date(task.revisionDate) >= reportGeneratedAt,
               )
             : []

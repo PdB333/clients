@@ -48,7 +48,7 @@ export class BitSubmitDirective implements OnInit {
 
           return awaitable.pipe(
             catchError((err: unknown) => {
-              logService?.error(`Async submit exception: ${err}`);
+              logService?.error("Async submit exception", err);
               validationService?.showError(err);
               return of(undefined);
             }),

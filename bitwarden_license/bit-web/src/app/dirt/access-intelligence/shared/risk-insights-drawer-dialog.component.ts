@@ -56,7 +56,7 @@ export class RiskInsightsDrawerDialogComponent {
         fileName: ExportHelper.getFileName("at-risk-members"),
         blobData: exportToCSV(this.drawerDetails.atRiskMemberDetails, {
           email: this.i18nService.t("email"),
-          atRiskPasswordCount: this.i18nService.t("atRiskApplications"),
+          atRiskPasswordCount: this.i18nService.t("atRiskPasswords"),
         }),
         blobOptions: { type: "text/plain" },
       });
